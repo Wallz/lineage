@@ -27,14 +27,15 @@ LineageStats = get_query_class("LineageStats")
 logger = logging.getLogger(__name__)
 
 
+from utils.hcaptcha import verify_hcaptcha
+
+
 def verificar_hcaptcha(token):
-    secret = settings.HCAPTCHA_SECRET_KEY
-    data = {
-        'response': token,
-        'secret': secret,
-    }
-    r = requests.post('https://hcaptcha.com/siteverify', data=data)
-    return r.json().get('success', False)
+    """
+    Wrapper function for hCaptcha verification.
+    Maintains backward compatibility with existing code.
+    """
+    return verify_hcaptcha(token)
 
 
 def logout_view(request):

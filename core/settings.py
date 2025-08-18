@@ -742,6 +742,11 @@ if not HCAPTCHA_SECRET_KEY:
 # Configuração para número máximo de tentativas de login antes do captcha
 LOGIN_MAX_ATTEMPTS = int(os.environ.get('CONFIG_LOGIN_MAX_ATTEMPTS', 3))
 
+# Configuração para comportamento do hCaptcha em caso de falha de rede
+# True = permitir registro/login mesmo se hCaptcha falhar (menos seguro)
+# False = bloquear registro/login se hCaptcha falhar (mais seguro)
+HCAPTCHA_FAIL_OPEN = str2bool(os.environ.get('CONFIG_HCAPTCHA_FAIL_OPEN', False))
+
 # =========================== HEAD CONFIGS ===========================
 
 PROJECT_TITLE = os.getenv('PROJECT_TITLE', 'Lineage 2 PDL')

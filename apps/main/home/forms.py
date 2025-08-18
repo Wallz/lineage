@@ -149,20 +149,14 @@ class LoginForm(AuthenticationForm):
                         raise forms.ValidationError(_("Verificação do captcha é obrigatória após múltiplas tentativas."))
                     
                     # Valida o captcha
-                    import requests
-                    from django.conf import settings
+                    from utils.hcaptcha import verify_hcaptcha
+                    import logging
                     
-                    secret = settings.HCAPTCHA_SECRET_KEY
-                    data = {
-                        'response': captcha_token,
-                        'secret': secret,
-                    }
-                    r = requests.post('https://hcaptcha.com/siteverify', data=data)
-                    captcha_valid = r.json().get('success', False)
+                    logger = logging.getLogger(__name__)
+                    
+                    captcha_valid = verify_hcaptcha(captcha_token)
                     
                     if not captcha_valid:
-                        import logging
-                        logger = logging.getLogger(__name__)
                         logger.warning(f"[LoginForm] Captcha falhou na validação")
                         raise forms.ValidationError(_("Verificação do captcha falhou. Tente novamente."))
             
