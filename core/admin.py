@@ -19,6 +19,16 @@ class BaseModelAdmin(ImportExportModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+class BaseInlineAdmin(admin.StackedInline):
+    """Classe base para inlines com configurações padrão"""
+    extra = 0  # Não adiciona linhas vazias automaticamente
+
+
+class BaseTabularInlineAdmin(admin.TabularInline):
+    """Classe base para inlines tabulares com configurações padrão"""
+    extra = 0  # Não adiciona linhas vazias automaticamente
+
+
 class BaseModelAdminAbstratic(ImportExportModelAdmin):
     list_display = ('created_at', 'created_by', 'updated_at', 'updated_by')
     readonly_fields = ('created_at', 'created_by', 'updated_at', 'updated_by')
