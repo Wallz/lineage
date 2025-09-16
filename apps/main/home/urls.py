@@ -34,13 +34,9 @@ urlpatterns = [
 
     # Wiki views - Redirecting to new lineage wiki
     path('wiki/', lambda request: redirect('wiki:home'), name='wiki'),
-    path('wiki/general/', lambda request: redirect('wiki:general'), name='wiki_general'),
-    path('wiki/rates/', lambda request: redirect('wiki:rates'), name='wiki_rates'),
-    path('wiki/raids/', lambda request: redirect('wiki:raids'), name='wiki_raids'),
-    path('wiki/assistance/', lambda request: redirect('wiki:assistance'), name='wiki_assistance'),
-    path('wiki/events/', lambda request: redirect('wiki:events'), name='wiki_events'),
     path('wiki/updates/', lambda request: redirect('wiki:updates'), name='updates'),
-    path('wiki/features/', lambda request: redirect('wiki:features'), name='features'),
+    path('wiki/search/', lambda request: redirect('wiki:search'), name='search'),
+    path('wiki/sitemap/', lambda request: redirect('wiki:sitemap'), name='sitemap'),
 
     # Authentication
     path('accounts/register/', register_view, name="register"),
