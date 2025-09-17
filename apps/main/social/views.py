@@ -2603,3 +2603,42 @@ def verification_admin_bulk_action_view(request):
                     messages.error(request, _('É necessário informar o motivo da rejeição.'))
     
     return redirect('social:verification_admin_list')
+
+
+def public_feed(request):
+    """Feed público da rede social - mostra apenas os últimos 10 posts públicos"""
+    # Buscar apenas posts públicos, sem necessidade de autenticação
+    posts = Post.objects.filter(
+        is_public=True
+    ).select_related('author').prefetch_related(
+        'likes', 'comments', 'hashtags'
+    ).order_by('-created_at')[:10]  # Apenas os últimos 10 posts
+    
+    # Anotar posts com informações básicas (sem informações do usuário logado)
+    for post in posts:
+        post.is_liked_by_current_user = False  # Usuário não logado
+        post.current_user_reaction = None  # Sem reação
+        post.is_flagged = False  # Não mostrar informações de moderação
+        post.is_hidden = False  # Não mostrar informações de moderação
+    
+    # Hashtags populares (para sidebar se necessário)
+    popular_hashtags = Hashtag.objects.filter(posts_count__gt=0).order_by('-posts_count')[:5]
+    
+    # Estatísticas básicas da rede (públicas)
+    network_stats = {
+        'total_users': User.objects.filter(is_active=True).count(),
+        'total_posts': Post.objects.filter(is_public=True).count(),
+        'posts_today': Post.objects.filter(
+            is_public=True,
+            created_at__date=timezone.now().date()
+        ).count(),
+    }
+    
+    context = {
+        'posts': posts,
+        'popular_hashtags': popular_hashtags,
+        'network_stats': network_stats,
+        'is_public_view': True,  # Flag para identificar que é a view pública
+    }
+    
+    return render(request, 'social/public_feed.html', context)

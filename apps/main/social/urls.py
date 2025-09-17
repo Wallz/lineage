@@ -6,6 +6,7 @@ app_name = 'social'
 urlpatterns = [
     # Feed e posts
     path('feed/', views.feed, name='feed'),
+    path('public/', views.public_feed, name='public_feed'),
     path('my-posts/', views.my_posts, name='my_posts'),
     path('post/<int:post_id>/', views.post_detail, name='post_detail'),
     
