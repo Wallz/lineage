@@ -206,6 +206,9 @@ MIDDLEWARE = [
     
     # Resource access middleware - deve vir logo após os middlewares básicos do Django
     "apps.main.resources.middleware.ResourceAccessMiddleware",
+    
+    # Request timeout monitoring - deve vir cedo para monitorar tudo
+    "middlewares.request_timeout_middleware.RequestTimeoutMiddleware",
 
     'allauth.account.middleware.AccountMiddleware',
     'debug_toolbar.middleware.DebugToolbarMiddleware',
@@ -507,9 +510,16 @@ CACHES = {
         'LOCATION': os.getenv('DJANGO_CACHE_REDIS_URI') if not DEBUG else 'unique-snowflake',
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'SOCKET_TIMEOUT': 5,  # Ajuste conforme necessário
-            'KEY_PREFIX': 'suop',  # Prefixo opcional para suas chaves
-        } if not DEBUG else {}
+            'SOCKET_TIMEOUT': 2,  # Timeout menor para evitar bloqueio
+            'SOCKET_CONNECT_TIMEOUT': 2,  # Timeout de conexão
+            'CONNECTION_POOL_KWARGS': {
+                'socket_timeout': 2,
+                'socket_connect_timeout': 2,
+                'retry_on_timeout': False,  # Não tenta novamente em timeout
+            },
+            'KEY_PREFIX': 'pdl',  # Prefixo opcional para suas chaves
+        } if not DEBUG else {},
+        'TIMEOUT': 300,  # Timeout padrão de 5 minutos para cache
     }
 }
 
@@ -595,6 +605,18 @@ AUDITOR_MIDDLEWARE_RESTRICT_PATHS = os.getenv('CONFIG_AUDITOR_MIDDLEWARE_RESTRIC
 
 # Configurações do middleware de auditoria
 AUDITOR_MIDDLEWARE_ENABLE = str2bool(os.environ.get('CONFIG_AUDITOR_MIDDLEWARE_ENABLE', 'False'))
+
+# =========================== REQUEST TIMEOUT CONFIGS ===========================
+
+# Timeout para requests HTTP (em segundos)
+REQUEST_TIMEOUT = int(os.environ.get('REQUEST_TIMEOUT', 30))
+
+# Timeout para verificação de status do servidor (em segundos)
+SERVER_STATUS_TIMEOUT = float(os.environ.get('SERVER_STATUS_TIMEOUT', 0.5))
+
+# Forçar status do servidor para evitar checks de socket
+FORCE_GAME_SERVER_STATUS = os.environ.get('FORCE_GAME_SERVER_STATUS', 'auto')
+FORCE_LOGIN_SERVER_STATUS = os.environ.get('FORCE_LOGIN_SERVER_STATUS', 'auto')
 AUDITOR_MIDDLEWARE_RESTRICT_PATHS = [
     '/static/',
     '/media/',

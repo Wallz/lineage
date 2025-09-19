@@ -45,14 +45,56 @@ with open('utils/data/index.json', 'r', encoding='utf-8') as file:
 
 
 def index(request):
-    # Pega os clãs mais bem posicionados
-    clanes = LineageStats.top_clans(limit=10) or []
+    from django.core.cache import cache
+    import time
+    
+    # Cache keys para evitar queries repetidas
+    cache_timeout = 60  # 1 minuto de cache
+    
+    # Pega os clãs mais bem posicionados com cache e fallback
+    clanes_cache_key = 'index_top_clans'
+    clanes = cache.get(clanes_cache_key)
+    
+    if clanes is None:
+        try:
+            # Timeout curto para evitar travamento
+            start_time = time.time()
+            clanes = LineageStats.top_clans(limit=10) or []
+            
+            # Se demorou mais que 2 segundos, usa cache vazio
+            if time.time() - start_time > 2:
+                logger.warning("Query top_clans demorou mais que 2s, usando fallback")
+                clanes = []
+            
+            # Aplica a lógica das crests usando a função já existente
+            if clanes:
+                clanes = attach_crests_to_clans(clanes)
+            
+            cache.set(clanes_cache_key, clanes, cache_timeout)
+        except Exception as e:
+            logger.error(f"Erro ao buscar top clans: {e}")
+            clanes = []
+            cache.set(clanes_cache_key, [], 30)  # Cache erro por 30s
 
-    # Aplica a lógica das crests usando a função já existente
-    clanes = attach_crests_to_clans(clanes)
-
-    # Pega os jogadores online
-    online = LineageStats.players_online() or []
+    # Pega os jogadores online com cache e fallback
+    online_cache_key = 'index_players_online'
+    online = cache.get(online_cache_key)
+    
+    if online is None:
+        try:
+            start_time = time.time()
+            online = LineageStats.players_online() or []
+            
+            # Se demorou mais que 1 segundo, usa fallback
+            if time.time() - start_time > 1:
+                logger.warning("Query players_online demorou mais que 1s, usando fallback")
+                online = [{'quant': 0}]
+            
+            cache.set(online_cache_key, online, cache_timeout)
+        except Exception as e:
+            logger.error(f"Erro ao buscar players online: {e}")
+            online = [{'quant': 0}]
+            cache.set(online_cache_key, online, 30)  # Cache erro por 30s
 
     # Pega a configuração do índice (ex: nome do servidor)
     config = IndexConfig.objects.first()
@@ -103,8 +145,37 @@ def index(request):
                     'translation': translation
                 })
 
-    # Verificar status do servidor
-    server_status = check_server_status()
+    # Verificar status do servidor com cache
+    server_status_cache_key = 'index_server_status'
+    server_status = cache.get(server_status_cache_key)
+    
+    if server_status is None:
+        try:
+            start_time = time.time()
+            server_status = check_server_status()
+            
+            # Se demorou mais que 1 segundo, usa status offline
+            if time.time() - start_time > 1:
+                logger.warning("check_server_status demorou mais que 1s, usando fallback")
+                server_status = {
+                    'overall_status': 'offline',
+                    'game_server': {'status': 'offline'},
+                    'login_server': {'status': 'offline'},
+                    'server_ip': '127.0.0.1',
+                    'checked_at': time.strftime('%Y-%m-%d %H:%M:%S')
+                }
+            
+            cache.set(server_status_cache_key, server_status, cache_timeout)
+        except Exception as e:
+            logger.error(f"Erro ao verificar status do servidor: {e}")
+            server_status = {
+                'overall_status': 'offline',
+                'game_server': {'status': 'offline'},
+                'login_server': {'status': 'offline'},
+                'server_ip': '127.0.0.1',
+                'checked_at': time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+            cache.set(server_status_cache_key, server_status, 30)  # Cache erro por 30s
 
     # Verificar se deve mostrar jogadores online
     show_players_online = getattr(settings, 'SHOW_PLAYERS_ONLINE', True)

@@ -40,21 +40,50 @@ class ServerStatusChecker:
         if timeout is None:
             timeout = self.timeout
             
+        # Reduz timeout para evitar travamento em requests HTTP
+        timeout = min(timeout, 0.5)  # Máximo 500ms para evitar bloqueio
+        
+        sock = None
         try:
-            # Cria um socket TCP
+            # Cria um socket TCP com configurações otimizadas
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(timeout)
             
-            # Tenta conectar
-            result = sock.connect_ex((host, port))
-            sock.close()
+            # Configura socket para não bloquear
+            sock.setblocking(False)
             
-            # Se result == 0, a conexão foi bem-sucedida
-            return result == 0
+            # Tenta conectar de forma não-bloqueante
+            try:
+                result = sock.connect_ex((host, port))
+                if result == 0:
+                    return True
+                elif result in [115, 10035]:  # EINPROGRESS (Linux) ou WSAEWOULDBLOCK (Windows)
+                    # Conexão em progresso, aguarda um pouco
+                    import select
+                    ready = select.select([], [sock], [], timeout)
+                    if ready[1]:
+                        # Socket pronto para escrita, verifica se conectou
+                        error = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                        return error == 0
+                return False
+            except BlockingIOError:
+                # Conexão em progresso, aguarda
+                import select
+                ready = select.select([], [sock], [], timeout)
+                if ready[1]:
+                    error = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                    return error == 0
+                return False
             
         except Exception as e:
-            logger.warning(f"Erro ao verificar porta {port} em {host}: {str(e)}")
+            logger.debug(f"Erro ao verificar porta {port} em {host}: {str(e)}")
             return False
+        finally:
+            if sock:
+                try:
+                    sock.close()
+                except:
+                    pass
     
     def get_game_server_status(self) -> Dict[str, any]:
         """
