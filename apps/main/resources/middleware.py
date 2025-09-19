@@ -1,11 +1,8 @@
-from django.shortcuts import redirect
-from django.contrib import messages
-from django.utils.translation import gettext_lazy as _
-from django.urls import reverse
-from django.http import Http404
-from django.core.cache import cache
+from django.shortcuts import render
+from django.http import HttpResponseNotFound
 import logging
-import time
+from functools import lru_cache
+from .models import SystemResource  # import fixo, não dentro da função
 
 logger = logging.getLogger(__name__)
 
@@ -14,35 +11,10 @@ class ResourceAccessMiddleware:
     """
     Middleware para verificar se os recursos estão ativos antes de permitir acesso
     """
-    
+
     def __init__(self, get_response):
         self.get_response = get_response
-        
-        # Import do modelo uma vez só na inicialização
-        try:
-            from .models import SystemResource
-            self.SystemResource = SystemResource
-        except ImportError:
-            logger.warning("SystemResource model not found, disabling resource checks")
-            self.SystemResource = None
-        
-        # Cache de recursos ativos (evita queries repetidas)
-        self.resource_cache_timeout = 300  # 5 minutos
-        
-        # Caminhos que não precisam de verificação (para performance)
-        self.skip_paths = [
-            '/static/',
-            '/media/',
-            '/admin/',
-            '/decrypted-file/',
-            '/favicon.ico',
-            '/robots.txt',
-            '/sitemap.xml',
-            '/health/',
-            '/api/',  # APIs geralmente não precisam de verificação de recursos
-            '/themes/',  # Arquivos de tema
-        ]
-        
+
         # Mapeamento de caminhos de URL para recursos
         self.path_mapping = {
             # Shop
@@ -53,229 +25,123 @@ class ResourceAccessMiddleware:
             '/app/shop/cart/checkout/': 'shop_checkout',
             '/app/shop/purchases/': 'shop_purchases',
             '/app/shop/manager/dashboard/': 'shop_dashboard',
-            
+
             # Wallet
             '/app/wallet/': 'wallet_module',
             '/app/wallet/dashboard/': 'wallet_dashboard',
             '/app/wallet/transfer/': 'wallet_transfer',
             '/app/wallet/history/': 'wallet_history',
-            
+
             # Social
             '/social/': 'social_module',
             '/social/feed/': 'social_feed',
             '/social/profile/': 'social_profile',
             '/social/search/': 'social_search',
-            
+
             # Games
             '/app/game/': 'games_module',
             '/app/game/battle-pass/': 'battle_pass',
             '/app/game/box-opening/': 'box_opening',
             '/app/game/roulette/': 'roulette',
-            
+
             # Auction
             '/app/auction/': 'auction_module',
             '/app/auction/list/': 'auction_list',
             '/app/auction/create/': 'auction_create',
-            
+
             # Inventory
             '/app/inventory/': 'inventory_module',
             '/app/inventory/dashboard/': 'inventory_dashboard',
-            
+
             # Payment
             '/app/payment/': 'payment_module',
             '/app/payment/process/': 'payment_process',
             '/app/payment/history/': 'payment_history',
         }
 
-    def __call__(self, request):
-        # Skip verificação para caminhos que não precisam (performance)
-        if self._should_skip_check(request.path):
-            return self.get_response(request)
-        
-        # Log apenas para caminhos que realmente precisam de verificação
-        # E apenas em DEBUG para evitar spam de logs
-        from django.conf import settings
-        if settings.DEBUG:
-            logger.debug(f"ResourceMiddleware verificando: {request.path}")
-        
-        # Verifica se o SystemResource está disponível
-        if not self.SystemResource:
-            return self.get_response(request)
-        
-        # Verifica se o recurso está ativo (com cache)
-        if not self._check_resource_access(request):
-            logger.warning(f"Recurso inativo detectado para caminho: {request.path}")
-            return self._handle_inactive_resource(request)
-        
-        response = self.get_response(request)
-        return response
-
-    def _should_skip_check(self, path):
-        """
-        Verifica se deve pular a verificação para este caminho (performance)
-        """
-        return any(path.startswith(skip_path) for skip_path in self.skip_paths)
-
-    def _check_resource_access(self, request):
-        """
-        Verifica se o usuário pode acessar o recurso solicitado
-        """
-        try:
-            # Pega o caminho da requisição
-            path = request.path
-            
-            # Verifica se o caminho está mapeado para algum recurso
-            resource_name = None
-            
-            # Primeiro, verifica mapeamento exato por caminho
-            if path in self.path_mapping:
-                resource_name = self.path_mapping[path]
-            else:
-                # Verifica mapeamento por prefixo (para URLs com parâmetros)
-                for mapped_path, mapped_resource in self.path_mapping.items():
-                    if path.startswith(mapped_path):
-                        resource_name = mapped_resource
-                        break
-            
-            # Se encontrou um recurso, verifica se está ativo (com cache)
-            if resource_name:
-                is_active = self._check_resource_hierarchy_cached(resource_name)
-                if not is_active:
-                    logger.info(f"Recurso '{resource_name}' está INATIVO para caminho '{path}'")
-                return is_active
-            
-            return True  # Se não há recurso mapeado, permite acesso
-            
-        except Exception as e:
-            logger.error(f"Erro ao verificar acesso ao recurso: {e}")
-            return True  # Em caso de erro, permite acesso por segurança
-
-    def _check_resource_hierarchy_cached(self, resource_name):
-        """
-        Verifica se um recurso está ativo considerando a hierarquia COM CACHE
-        """
-        cache_key = f"resource_active:{resource_name}"
-        
-        # Tenta pegar do cache primeiro
-        try:
-            cached_result = cache.get(cache_key)
-            if cached_result is not None:
-                return cached_result
-        except Exception as e:
-            logger.warning(f"Erro ao acessar cache de recursos: {e}")
-        
-        # Se não está no cache, verifica e salva
-        try:
-            is_active = self._check_resource_hierarchy(resource_name)
-            
-            # Salva no cache por 5 minutos
-            try:
-                cache.set(cache_key, is_active, self.resource_cache_timeout)
-            except Exception as e:
-                logger.warning(f"Erro ao salvar no cache de recursos: {e}")
-            
-            return is_active
-        except Exception as e:
-            logger.error(f"Erro ao verificar hierarquia de recursos: {e}")
-            return True  # Em caso de erro, permite acesso
-
-    def _check_resource_hierarchy(self, resource_name):
-        """
-        Verifica se um recurso está ativo considerando a hierarquia
-        """
-        
-        # Define a hierarquia de recursos
-        hierarchy = {
-            # Games - se games_module estiver inativo, todos os jogos ficam inativos
+        # Hierarquia pré-definida
+        self.hierarchy = {
             'battle_pass': 'games_module',
-            'box_opening': 'games_module', 
+            'box_opening': 'games_module',
             'roulette': 'games_module',
-            
-            # Shop - se shop_module estiver inativo, todos os recursos da shop ficam inativos
             'shop_dashboard': 'shop_module',
             'shop_items': 'shop_module',
             'shop_packages': 'shop_module',
             'shop_cart': 'shop_module',
             'shop_checkout': 'shop_module',
             'shop_purchases': 'shop_module',
-            
-            # Wallet - se wallet_module estiver inativo, todos os recursos da wallet ficam inativos
             'wallet_dashboard': 'wallet_module',
             'wallet_transfer': 'wallet_module',
             'wallet_history': 'wallet_module',
-            
-            # Social - se social_module estiver inativo, todos os recursos sociais ficam inativos
             'social_feed': 'social_module',
             'social_profile': 'social_module',
             'social_search': 'social_module',
-            
-            # Auction - se auction_module estiver inativo, todos os recursos de leilão ficam inativos
             'auction_list': 'auction_module',
             'auction_create': 'auction_module',
-            
-            # Inventory - se inventory_module estiver inativo, todos os recursos de inventário ficam inativos
             'inventory_dashboard': 'inventory_module',
-            
-            # Payment - se payment_module estiver inativo, todos os recursos de pagamento ficam inativos
             'payment_process': 'payment_module',
             'payment_history': 'payment_module',
         }
-        
-        # Verifica se o recurso tem um módulo pai
-        if resource_name in hierarchy:
-            parent_module = hierarchy[resource_name]
-            
-            # Primeiro verifica se o módulo pai está ativo
-            parent_active = self.SystemResource.is_resource_active(parent_module)
-            if not parent_active:
-                logger.debug(f"Módulo pai '{parent_module}' está inativo, bloqueando '{resource_name}'")
-                return False
-            
-            # Se o módulo pai está ativo, verifica o recurso específico
-            resource_active = self.SystemResource.is_resource_active(resource_name)
-            return resource_active
-        else:
-            # Se não tem módulo pai, verifica apenas o recurso
-            return self.SystemResource.is_resource_active(resource_name)
+
+    def __call__(self, request):
+        logger.debug(f"Middleware: verificando caminho {request.path}")
+
+        if not self._check_resource_access(request.path):
+            logger.warning(f"Recurso inativo detectado para caminho: {request.path}")
+            return self._handle_inactive_resource(request)
+
+        return self.get_response(request)
+
+    def _check_resource_access(self, path: str) -> bool:
+        """Verifica se o recurso solicitado está ativo"""
+        try:
+            resource_name = self.path_mapping.get(path)
+
+            # se não achou, tenta por prefixo (mais caro, só se necessário)
+            if not resource_name:
+                for mapped_path, mapped_resource in self.path_mapping.items():
+                    if path.startswith(mapped_path):
+                        resource_name = mapped_resource
+                        break
+
+            if resource_name:
+                return self._check_resource_hierarchy(resource_name)
+
+            return True  # Se não está mapeado, passa direto
+
+        except Exception as e:
+            logger.error(f"Erro em _check_resource_access: {e}")
+            return True
+
+    @lru_cache(maxsize=256)
+    def _check_resource_hierarchy(self, resource_name: str) -> bool:
+        """Verifica recurso e seu módulo pai com cache"""
+        parent = self.hierarchy.get(resource_name)
+
+        if parent and not SystemResource.is_resource_active(parent):
+            logger.debug(f"Módulo pai '{parent}' inativo -> bloqueando '{resource_name}'")
+            return False
+
+        return SystemResource.is_resource_active(resource_name)
 
     def _handle_inactive_resource(self, request):
-        """
-        Lida com tentativas de acesso a recursos inativos
-        """
-        from django.shortcuts import render
-        from django.http import HttpResponseNotFound
-        
-        # Para todos os usuários, bloqueia o acesso
-        if request.user.is_staff:
-            # Staff vê página 404 personalizada com informações técnicas
-            try:
-                return render(request, 'resources/404.html', status=404)
-            except Exception as e:
-                logger.error(f"Erro ao renderizar template 404 para staff: {e}")
-                # Fallback para HTML simples para staff
-                return HttpResponseNotFound(
-                    '<!DOCTYPE html>'
-                    '<html><head><title>Recurso Indisponível</title></head>'
-                    '<body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">'
-                    '<h1 style="color: #dc3545;">404 - Recurso Indisponível</h1>'
-                    '<p>Este recurso está temporariamente indisponível.</p>'
-                    '<p><strong>Info Técnica:</strong> Caminho: ' + request.path + '</p>'
-                    '<p><a href="/pages/dashboard/">Voltar ao Dashboard</a></p>'
-                    '</body></html>'
-                )
-        else:
-            # Usuário comum vê a página 404 padrão do sistema
-            try:
-                return render(request, 'errors/404.html', status=404)
-            except Exception as e:
-                logger.error(f"Erro ao renderizar template 404 padrão: {e}")
-                # Fallback para HTML simples para usuário comum
-                return HttpResponseNotFound(
-                    '<!DOCTYPE html>'
-                    '<html><head><title>Página não encontrada</title></head>'
-                    '<body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">'
-                    '<h1 style="color: #dc3545;">404 - Página não encontrada</h1>'
-                    '<p>A página que você está procurando não existe ou foi movida.</p>'
-                    '<p><a href="/pages/dashboard/">Voltar ao Dashboard</a></p>'
-                    '</body></html>'
-                )
+        """Retorna resposta para recurso inativo"""
+        template = 'resources/404.html' if request.user.is_staff else 'errors/404.html'
+
+        try:
+            return render(request, template, status=404)
+        except Exception as e:
+            logger.error(f"Erro ao renderizar {template}: {e}")
+            msg = (
+                '<h1 style="color: #dc3545;">404 - Recurso Indisponível</h1>'
+                '<p>Este recurso está temporariamente indisponível.</p>'
+                if request.user.is_staff else
+                '<h1 style="color: #dc3545;">404 - Página não encontrada</h1>'
+                '<p>A página que você está procurando não existe ou foi movida.</p>'
+            )
+            return HttpResponseNotFound(
+                f'<!DOCTYPE html><html><head><title>Erro</title></head>'
+                f'<body style="font-family: Arial; text-align:center; padding:50px;">'
+                f'{msg}<p><a href="/pages/dashboard/">Voltar ao Dashboard</a></p>'
+                f'</body></html>'
+            )
