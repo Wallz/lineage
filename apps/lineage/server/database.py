@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.engine import Engine, Result
+from urllib.parse import quote_plus
 
 load_dotenv()
 
@@ -45,9 +46,14 @@ class LineageDB:
             port = os.getenv("LINEAGE_DB_PORT", "3306")
             dbname = os.getenv("LINEAGE_DB_NAME")
 
-            url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{dbname}"
+            # 🔒 Codifica a senha pra evitar erro com caracteres especiais
+            safe_password = quote_plus(password)
+
+            url = f"mysql+pymysql://{user}:{safe_password}@{host}:{port}/{dbname}"
             self.engine = create_engine(url, echo=False, pool_pre_ping=True)
+
             print("✅ Conectado ao banco Lineage com SQLAlchemy")
+
         except Exception as e:
             print(f"❌ Falha ao conectar ao banco Lineage: {e}")
             self.engine = None
