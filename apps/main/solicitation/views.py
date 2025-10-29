@@ -99,7 +99,7 @@ class SolicitationCreateView(LoginRequiredMixin, CreateView):
                 user=None,  # None para broadcast para staff
                 notification_type='staff',
                 message=f'Nova solicitação criada: {form.instance.title}',
-                created_by=self.request.user,
+                created_by=None,  # Notificação pública staff sem created_by
                 link=reverse('solicitation:solicitation_dashboard', kwargs={'protocol': form.instance.protocol})
             )
         except Exception as e:

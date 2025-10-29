@@ -73,7 +73,7 @@ def stripe_webhook(request):
                         user=None,
                         notification_type='staff',
                         message=f"Pagamento aprovado para {pagamento.usuario.username} no valor de R$ {valor:.2f}.",
-                        created_by=pagamento.usuario
+                        created_by=None  # Notificação pública staff sem created_by
                     )
             except Pagamento.DoesNotExist:
                 logger.error(f"Pagamento ID {pagamento_id} não encontrado.")
