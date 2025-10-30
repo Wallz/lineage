@@ -68,7 +68,7 @@ def account_dashboard(request):
         level = char.get('base_level', '-')
 
         char_list.append({
-            'id': char['obj_Id'],
+            'id': char['obj_id'],
             'nome': char['char_name'],
             'title': char.get('title', '-'),
             'lastAccess': datetime.fromtimestamp(int(char['lastAccess']) / 1000).strftime('%B %d, %Y às %H:%M') if char.get('lastAccess') else '-',
