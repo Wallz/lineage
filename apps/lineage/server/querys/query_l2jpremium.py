@@ -55,11 +55,11 @@ class LineageStats:
             LEFT JOIN clan_data D ON D.clan_id = C.clanid
             WHERE C.accessLevel = '0'
             ORDER BY pvpkills DESC, pkkills DESC, onlinetime DESC, char_name ASC
-            LIMIT :limit
+            LEFT JOIN character_subclasses CS ON CS.charId = C.charId AND CS.class_index = 0
         """
         return LineageStats._run_query(sql, {"limit": limit})
-
-    @staticmethod
+            INNER JOIN agathion_data A ON A.owner_id = C.charId
+            WHERE C.accessLevel = '0' 
     @cache_lineage_result(timeout=300)
     def top_pk(limit=10):
         sql = """
@@ -376,23 +376,6 @@ class LineageStats:
             LEFT JOIN characters P ON P.charId = C.leader_id
         """
         return LineageStats._run_query(sql)
-
-    @staticmethod
-    @cache_lineage_result(timeout=300)
-    def siege_participants(castle_id):
-        sql = """
-            SELECT 
-                S.type, 
-                C.clan_name,
-                C.clan_id
-            FROM siege_clans S
-            LEFT JOIN clan_data C ON C.clan_id = S.clan_id
-            WHERE S.castle_id = :castle_id
-        """
-        return LineageStats._run_query(sql, {"castle_id": castle_id})
-
-    @staticmethod
-    @cache_lineage_result(timeout=300)
     def boss_jewel_locations(boss_jewel_ids):
         sql = """
             SELECT 
@@ -412,6 +395,37 @@ class LineageStats:
         """
         return LineageStats._run_query(sql, {"boss_jewel_ids": tuple(boss_jewel_ids)})
 
+    @staticmethod
+    @cache_lineage_result(timeout=300)
+    def top_agathions(limit=10):
+        sql = """
+            SELECT 
+                C.char_name, 
+                C.online, 
+                C.onlinetime,
+                CS.level,
+                CS.class_id AS base,
+                D.name AS clan_name,
+                C.clanid AS clan_id,
+                CD.ally_id AS ally_id,
+                A.name AS agathion_name,
+                A.level AS agathion_level,
+                A.exp AS agathion_exp,
+                A.item_id AS agathion_item_id,
+                A.status AS agathion_status
+            FROM characters C
+            LEFT JOIN character_subclasses CS ON CS.charId = C.charId AND CS.class_index = 0
+            LEFT JOIN clan_subpledges D ON D.clan_id = C.clanid AND D.sub_pledge_id = 0
+            LEFT JOIN clan_data CD ON CD.clan_id = C.clanid
+            INNER JOIN agathion_data A ON A.owner_id = C.charId
+            WHERE C.accessLevel = '0' 
+                AND A.level IS NOT NULL 
+                AND A.status IN ('active', 'stored')
+            ORDER BY A.level DESC, A.exp DESC, CS.level DESC, C.char_name ASC
+            LIMIT :limit
+        """
+        return LineageStats._run_query(sql, {"limit": limit})
+
 
 class LineageServices:
 
@@ -421,7 +435,7 @@ class LineageServices:
         sql = """
             SELECT
                 C.*, 
-                C.charId AS obj_Id,
+                C.charId AS obj_id,
                 C.classid AS base_class,
                 C.level AS base_level,
                 (SELECT S1.class_id FROM character_subclasses AS S1 
@@ -742,7 +756,7 @@ class LineageAccount:
 
 
 class TransferFromWalletToChar:
-    items_delayed = False
+    items_delayed = True
 
     @staticmethod
     @cache_lineage_result(timeout=300, use_cache=False)
@@ -769,7 +783,7 @@ class TransferFromWalletToChar:
 
     @staticmethod
     @cache_lineage_result(timeout=300, use_cache=False)
-    def insert_coin(char_name: str, coin_id: int, amount: int, enchant: int = 0):
+    def insert_coin(char_name: str, coin_id: int, amount: int, enchant: int = 0, loc: str = 'INVENTORY'):
         db = LineageDB()
 
         # Get character ID
@@ -778,94 +792,24 @@ class TransferFromWalletToChar:
         if not char_result:
             return None
 
-        owner_id = char_result[0]["charId"]
+        char_id = char_result[0]["charId"]
 
-        # Check if item already exists in inventory
-        check_query = """
-            SELECT object_id FROM items 
-            WHERE owner_id = :owner_id 
-            AND item_id = :coin_id 
-            AND loc = 'INVENTORY' 
-            LIMIT 1
-        """
-        existing_item = db.select(check_query, {
-            "owner_id": owner_id,
-            "coin_id": coin_id
-        })
-
-        if existing_item:
-            # Item exists, update count
-            object_id = existing_item[0]["object_id"]
-            update_query = """
-                UPDATE items 
-                SET count = count + :amount 
-                WHERE object_id = :object_id 
-                AND owner_id = :owner_id 
-                LIMIT 1
-            """
-            result = db.update(update_query, {
-                "amount": amount,
-                "object_id": object_id,
-                "owner_id": owner_id
-            })
-            if not result:
-                print(f"Erro ao atualizar item existente: {object_id}")
-            else:
-                print(f"Item existente atualizado com sucesso: {object_id}")
-            return result
-
-        # Item doesn't exist, create new one
-        # Get last object_id
-        last_object_query = "SELECT object_id FROM items ORDER BY object_id DESC LIMIT 1"
-        last_object_result = db.select(last_object_query)
-        if not last_object_result:
-            new_object_id = 700000000
-        else:
-            last_object_id = int(last_object_result[0]["object_id"])
-            new_object_id = last_object_id + 1
-
-        # Get last loc_data for this owner
-        last_loc_query = """
-            SELECT loc_data FROM items 
-            WHERE owner_id = :owner_id 
-            ORDER BY loc_data DESC LIMIT 1
-        """
-        last_loc_result = db.select(last_loc_query, {"owner_id": owner_id})
-        if not last_loc_result:
-            new_loc_data = 0
-        else:
-            last_loc_data = int(last_loc_result[0]["loc_data"])
-            new_loc_data = last_loc_data + 1
-
-        # Get current timestamp
-        creation_time = int(time.time())
-
-        # Insert new item with all required fields
+        # Insere o pedido de entrega na tabela web_item_delivery
         insert_query = """
-            INSERT INTO items (
-                owner_id, object_id, item_id, count,
-                enchant_level, loc, loc_data, process,
-                creator_id, first_owner_id, creation_time
-            ) VALUES (
-                :owner_id, :object_id, :coin_id, :amount,
-                :enchant, 'INVENTORY', :loc_data, 'admin_create',
-                268501254, 268501254, :creation_time
-            )
+            INSERT INTO web_item_delivery (charId, item_id, count, loc)
+            VALUES (:char_id, :coin_id, :amount, :loc)
         """
         result = db.insert(insert_query, {
-            "owner_id": owner_id,
-            "object_id": new_object_id,
+            "char_id": char_id,
             "coin_id": coin_id,
             "amount": amount,
-            "enchant": enchant,
-            "loc_data": new_loc_data,
-            "creation_time": creation_time
+            "loc": loc
         })
 
         if not result:
-            print(f"Erro ao criar novo item: {new_object_id}")
+            print(f"Erro ao criar pedido de entrega para o personagem: {char_name}")
         else:
-            print(f"Novo item criado com sucesso: {new_object_id}")
+            print(f"Pedido de entrega criado com sucesso para o personagem: {char_name}")
 
         return result is not None
 
