@@ -6,6 +6,7 @@
     overflow-y: auto;
     background-color: #f0f0f0;
     margin-bottom: 20px;
+    width: 100%;
 }
 
 .chat-message {
@@ -172,9 +173,42 @@
     resize: none; /* vamos auto-redimensionar via JS padrão do browser */
 }
 
+.chat-input-bar {
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+    border-top: 1px solid #e5e5e5;
+    padding-top: 6px;
+    gap: 8px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
+.chat-textarea {
+    border-radius: 12px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    flex: 1 1 auto; /* ocupa o espaço disponível */
+    min-width: 0;   /* permite encolher corretamente entre botões */
+    width: 100%;
+}
+
+.chat-input-bar .form-control {
+    width: 100%; /* força largura total dentro de input-group do Bootstrap */
+}
+
+.chat-emoji-btn,
+.chat-send-btn {
+    min-width: 44px; /* alvo de toque */
+    min-height: 44px;
+    flex: 0 0 auto; /* não esticar */
+}
+
 @media (max-width: 576px) {
     #chat-log {
-        height: calc(100vh - 240px); /* mais alto em telas pequenas */
+        height: calc(100dvh - 220px); /* usa dvh para teclado móvel */
     }
     .message-content {
         max-width: 75%;
@@ -182,12 +216,4 @@
     .chat-message {
         gap: 8px;
     }
-}
-
-.chat-input-bar {
-    position: sticky;
-    bottom: 0;
-    background: #fff;
-    border-top: 1px solid #e5e5e5;
-    padding-top: 6px;
 }
