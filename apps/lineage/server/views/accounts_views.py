@@ -66,27 +66,33 @@ def account_dashboard(request):
     for char in personagens:
         # Verificando se o campo 'level' existe antes de acessá-lo
         level = char.get('base_level', '-')
+        
+        # Tenta encontrar obj_id com diferentes variações de nome
+        obj_id = char.get('obj_id') or char.get('obj_Id') or char.get('charId') or char.get('char_id', '-')
+        char_name = char.get('char_name') or char.get('charname', '-')
+        base_class = char.get('base_class') or char.get('classid', 0)
+        sex = char.get('sex', 0)
 
         char_list.append({
-            'id': char['obj_id'],
-            'nome': char['char_name'],
+            'id': obj_id,
+            'nome': char_name,
             'title': char.get('title', '-'),
             'lastAccess': datetime.fromtimestamp(int(char['lastAccess']) / 1000).strftime('%B %d, %Y às %H:%M') if char.get('lastAccess') else '-',
             'online': 'Online' if char.get('online') else 'Offline',
-            'base_class': get_class_name(char['base_class']),
+            'base_class': get_class_name(base_class),
             'subclass1': get_class_name(char['subclass1']) if char.get('subclass1') else '-',
             'subclass2': get_class_name(char['subclass2']) if char.get('subclass2') else '-',
             'subclass3': get_class_name(char['subclass3']) if char.get('subclass3') else '-',
             'level': level,
-            'sex': 'Feminino' if char['sex'] else 'Masculino',
-            'pvp': char['pvpkills'],
-            'pk': char['pkkills'],
-            'karma': char['karma'],
+            'sex': 'Feminino' if sex else 'Masculino',
+            'pvp': char.get('pvpkills', 0),
+            'pk': char.get('pkkills', 0),
+            'karma': char.get('karma', 0),
             'clan': char.get('clan_name', '-'),
             'ally': char.get('ally_name', '-'),
             'nobless': 'Sim' if char.get('nobless') else 'Não',
             'hero': 'Sim' if char.get('hero_end') and int(char['hero_end']) > int(now().timestamp() * 1000) else 'Não',
-            'avatar': gen_avatar(char['base_class'], char['sex'])
+            'avatar': gen_avatar(base_class, sex)
         })
 
     context = {
