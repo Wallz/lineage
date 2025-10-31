@@ -1,6 +1,6 @@
 services:
-  site:
-    container_name: site
+  site_http:
+    container_name: site_http
     restart: always
     build:
       context: .
@@ -15,7 +15,34 @@ services:
       - static_data:/usr/src/app/staticfiles
       - media_data:/usr/src/app/media
       - ./themes:/usr/src/app/themes/installed/
-    command: daphne -b 0.0.0.0 -p 5005 core.asgi:application
+    command: gunicorn core.wsgi:application -c gunicorn-cfg.py
+    init: true
+    stop_grace_period: 60s
+    environment:
+      - RUNNING_IN_DOCKER=true
+    depends_on:
+      - redis
+      - postgres
+
+  site_asgi:
+    container_name: site_asgi
+    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: site:latest
+    env_file:
+      - .env
+    networks:
+      - lineage_network
+    volumes:
+      - logs_data:/usr/src/app/logs
+      - static_data:/usr/src/app/staticfiles
+      - media_data:/usr/src/app/media
+      - ./themes:/usr/src/app/themes/installed/
+    command: daphne -b 0.0.0.0 -p 5005 --shutdown-timeout 60 core.asgi:application
+    init: true
+    stop_grace_period: 60s
     environment:
       - RUNNING_IN_DOCKER=true
     depends_on:
@@ -38,7 +65,7 @@ services:
     command: celery -A core worker
     depends_on:
       - redis
-      - site
+      - site_http
     hostname: celery-worker
     dns:
       - 8.8.8.8
@@ -81,7 +108,7 @@ services:
     command: celery -A core.celery flower --persistent=True --db="flower_db" --url-prefix=flower
     depends_on:
       - redis
-      - site
+      - site_http
       - celery
 
   nginx:
@@ -100,7 +127,8 @@ services:
     networks:
       - lineage_network
     depends_on: 
-      - site
+      - site_http
+      - site_asgi
 
   redis:
     container_name: redis
