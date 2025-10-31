@@ -157,6 +157,10 @@ def confirmar_pagamento(request, pedido_id):
                 pending_url = request.build_absolute_uri(
                     reverse('payment:pagamento_pendente')
                 ) + f"?pagamento_id={pagamento.id}&pedido_id={pedido.id}"
+                # Constrói URLs de retorno com base no host atual para evitar inconsistências de domínio
+                success_url = request.build_absolute_uri(reverse('payment:pagamento_sucesso'))
+                failure_url = request.build_absolute_uri(reverse('payment:pagamento_erro'))
+
                 preference_data = {
                     "items": [{
                         "title": "Moedas para o jogo",
@@ -167,8 +171,8 @@ def confirmar_pagamento(request, pedido_id):
                     "external_reference": str(pagamento.id),
                     "notification_url": getattr(settings, 'MERCADO_PAGO_NOTIFICATION_URL', request.build_absolute_uri(reverse('payment:notificacao_mercado_pago'))),
                     "back_urls": {
-                        "success": settings.MERCADO_PAGO_SUCCESS_URL,
-                        "failure": settings.MERCADO_PAGO_FAILURE_URL,
+                        "success": success_url,
+                        "failure": failure_url,
                         "pending": pending_url,
                     },
                     "auto_return": "approved",

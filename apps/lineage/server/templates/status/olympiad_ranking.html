@@ -248,15 +248,24 @@
     </div>
 
     {% if ranking %}
+    {% if request.user.is_staff or request.user.is_superuser %}
+    <div class="d-flex justify-content-end mb-2">
+      <button id="togglePointsBtn" type="button" class="btn btn-sm btn-outline-secondary" title="Mostrar/ocultar pontos">
+        <span id="togglePointsIcon">👁️</span>
+      </button>
+    </div>
+    {% endif %}
     <div class="table-responsive-md">
-      <table class="table table-striped">
+      <table class="table table-striped" id="olympTable" {% if request.user.is_staff or request.user.is_superuser %}data-points-visible="false"{% endif %}>
         <thead>
           <tr>
             <th>#</th>
             <th>{% trans "Jogador" %}</th>
             <th class="d-none d-md-table-cell">{% trans "Clan" %}</th>
             <th class="d-none d-md-table-cell">{% trans "Aliança" %}</th>
-            <th>{% trans "Pontos" %}</th>
+            {% if request.user.is_staff or request.user.is_superuser %}
+            <th class="col-points">{% trans "Pontos" %}</th>
+            {% endif %}
             <th>{% trans "Classe" %}</th>
             <th>{% trans "Status" %}</th>
           </tr>
@@ -276,9 +285,11 @@
               {{ player.clan_name|default:"-" }}
             </div></td>
             <td class="d-none d-md-table-cell">{{ player.ally_name|default:"-" }}</td>
-            <td>
-              <span class="badge bg-warning text-dark">{{ player.olympiad_points|default:"-" }}</span>
+            {% if request.user.is_staff or request.user.is_superuser %}
+            <td class="col-points">
+              <span class="badge bg-warning text-dark points-value">{{ player.olympiad_points|default:"-" }}</span>
             </td>
+            {% endif %}
             <td>{{ player.class_name|default:"-" }}</td>
             <td>
               {% if player.online %}
@@ -296,6 +307,33 @@
     <div class="alert alert-warning text-center">
       {% trans "Nenhum dado encontrado." %}
     </div>
+    {% endif %}
+
+    {% if request.user.is_staff or request.user.is_superuser %}
+    <script>
+    (function(){
+      var table = document.getElementById('olympTable');
+      if(!table) return;
+      function applyVisibility(){
+        var visible = table.getAttribute('data-points-visible') === 'true';
+        var ptsCols = table.querySelectorAll('.col-points');
+        for (var i=0;i<ptsCols.length;i++) {
+          ptsCols[i].style.display = visible ? '' : 'none';
+        }
+        var icon = document.getElementById('togglePointsIcon');
+        if(icon){ icon.textContent = visible ? '👁️‍🗨️' : '👁️'; }
+      }
+      applyVisibility();
+      var btn = document.getElementById('togglePointsBtn');
+      if(btn){
+        btn.addEventListener('click', function(){
+          var current = table.getAttribute('data-points-visible') === 'true';
+          table.setAttribute('data-points-visible', current ? 'false' : 'true');
+          applyVisibility();
+        });
+      }
+    })();
+    </script>
     {% endif %}
   </div>
 </div>

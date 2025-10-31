@@ -99,15 +99,24 @@
     </div>
 
     <div class="tops-table-container">
+        {% if request.user.is_staff or request.user.is_superuser %}
+        <div class="tops-flex" style="justify-content:flex-end; gap:8px; margin-bottom:8px;">
+            <button id="togglePointsBtn" class="tops-badge secondary" type="button" title="Mostrar/ocultar pontos">
+                <span id="togglePointsIcon">👁️</span>
+            </button>
+        </div>
+        {% endif %}
         {% if ranking %}
         <div class="tops-table-responsive">
-            <table class="tops-table">
+            <table class="tops-table" id="olympTable" {% if request.user.is_staff or request.user.is_superuser %}data-points-visible="false"{% endif %}>
                 <thead>
                     <tr>
                         <th>#</th>
                         <th>{% trans "Jogador" %}</th>
                         <th>{% trans "Clã" %}</th>
-                        <th>{% trans "Pontos" %}</th>
+                        {% if request.user.is_staff or request.user.is_superuser %}
+                        <th class="col-points">{% trans "Pontos" %}</th>
+                        {% endif %}
                         <th>{% trans "Status" %}</th>
                         <th>{% trans "Classe" %}</th>
                     </tr>
@@ -146,9 +155,11 @@
                                 <span class="tops-text-muted">-</span>
                             {% endif %}
                         </td>
-                        <td>
-                            <span class="tops-badge warning">{{ player.olympiad_points|default:"-" }}</span>
+                        {% if request.user.is_staff or request.user.is_superuser %}
+                        <td class="col-points">
+                            <span class="tops-badge warning points-value">{{ player.olympiad_points|default:"-" }}</span>
                         </td>
+                        {% endif %}
                         <td>
                             {% if player.online > 0 %}
                                 <span class="tops-badge success">🟢 {% trans "Online" %}</span>
@@ -378,6 +389,33 @@
     }
 }
 </style>
+
+{% if request.user.is_staff or request.user.is_superuser %}
+<script>
+(function(){
+  var table = document.getElementById('olympTable');
+  if(!table) return;
+  function applyVisibility(){
+    var visible = table.getAttribute('data-points-visible') === 'true';
+    var ptsCols = table.querySelectorAll('.col-points');
+    for (var i=0;i<ptsCols.length;i++) {
+      ptsCols[i].style.display = visible ? '' : 'none';
+    }
+    var icon = document.getElementById('togglePointsIcon');
+    if(icon){ icon.textContent = visible ? '👁️‍🗨️' : '👁️'; }
+  }
+  applyVisibility();
+  var btn = document.getElementById('togglePointsBtn');
+  if(btn){
+    btn.addEventListener('click', function(){
+      var current = table.getAttribute('data-points-visible') === 'true';
+      table.setAttribute('data-points-visible', current ? 'false' : 'true');
+      applyVisibility();
+    });
+  }
+})();
+</script>
+{% endif %}
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

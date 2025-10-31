@@ -1,0 +1,91 @@
+{% extends "layouts/base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block extrastyle %}
+<style>
+  .mp-pending-wrapper { min-height: 70vh; display: flex; align-items: center; }
+  .mp-card { background: #1f2937; border-radius: 12px; padding: 24px; color: #e5e7eb; box-shadow: 0 10px 30px rgba(0,0,0,.3); }
+  .mp-title { font-weight: 700; color: #fff; }
+  .mp-sub { color: #9ca3af; }
+  .mp-actions a { text-decoration: none; }
+  .btn-back { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; border-radius: 10px; padding: 12px 18px; color: #fff; font-weight: 600; }
+  .status-pill { display: inline-block; background: #f59e0b; color: #111827; padding: 4px 10px; border-radius: 9999px; font-weight: 700; font-size: 12px; }
+  .progress { height: 6px; background: #374151; border-radius: 9999px; overflow: hidden; }
+  .progress > div { width: 50%; height: 100%; background: linear-gradient(90deg,#22c55e,#06b6d4); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0% { transform: translateX(-60%);} 50% { transform: translateX(10%);} 100% { transform: translateX(110%);} }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mp-pending-wrapper">
+  <div class="row w-100 justify-content-center">
+    <div class="col-lg-7">
+      <div class="mp-card">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h3 class="mp-title mb-0">{% trans "Aguardando confirmação do PIX" %}</h3>
+          <span class="status-pill">{% trans "Pendente" %}</span>
+        </div>
+        <p class="mp-sub mb-3">{% trans "Finalize o pagamento na página do Mercado Pago. Assim que o PIX for aprovado, esta página avançará automaticamente." %}</p>
+
+        <div class="progress mb-3"><div></div></div>
+
+        <div id="mp-status" class="mb-3" style="font-variant-numeric: tabular-nums;"></div>
+
+        <div class="mp-actions d-flex gap-2">
+          <a class="btn btn-secondary" href="javascript:history.back()">{% trans "Voltar" %}</a>
+          <a class="btn btn-outline-light" href="/app/wallet/">{% trans "Ir para a carteira" %}</a>
+          <a class="btn-back ms-auto" href="/app/payment/pending/">{% trans "Ver pedidos pendentes" %}</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Lê pagamento_id da query string
+  function getQueryParam(name){
+    const p = new URLSearchParams(window.location.search);
+    return p.get(name);
+  }
+  const pagamentoId = getQueryParam('pagamento_id');
+  if(!pagamentoId){
+    document.getElementById('mp-status').textContent = '{% trans "Não foi possível identificar o pagamento." %}';
+    return;
+  }
+
+  const statusEl = document.getElementById('mp-status');
+  let attempts = 0;
+  const maxAttempts = 90; // ~3min (90 * 2s)
+
+  async function check(){
+    attempts += 1;
+    try{
+      const url = '{% url "payment:status_pagamento_ajax" %}?pagamento_id=' + encodeURIComponent(pagamentoId);
+      const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const data = await resp.json();
+      if(data && data.success){
+        statusEl.textContent = `Status: ${data.pagamento_status || 'pending'} | Pedido: ${data.pedido_status || 'PENDENTE'}`;
+        if(data.concluido){
+          window.location.replace('{% url "wallet:dashboard" %}');
+          return;
+        }
+      } else {
+        statusEl.textContent = '{% trans "Aguardando confirmação do pagamento..." %}';
+      }
+    }catch(e){
+      // Silencia erros intermitentes
+    }
+    if(attempts < maxAttempts){
+      setTimeout(check, 2000);
+    } else {
+      statusEl.textContent = '{% trans "Ainda pendente. Você pode fechar esta aba e acompanhar em Pedidos Pendentes." %}';
+    }
+  }
+  check();
+})();
+</script>
+{% endblock %}
+
+
