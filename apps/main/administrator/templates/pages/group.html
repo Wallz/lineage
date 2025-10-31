@@ -500,8 +500,8 @@
     </div>
 
     <!-- Chat Log -->
-    <div id="chat-log">
-      <div id="messages-container">
+    <div id="chat-log" class="d-flex flex-column">
+      <div id="messages-container" class="flex-grow-1">
         {% for message in chat_messages %}
           <div class="chat-message {% if message.sender.username == username %}sent{% else %}received{% endif %}">
             <div class="admin-avatar-container">
@@ -522,7 +522,7 @@
     </div>
 
     <!-- Input for Chat Message -->
-    <div class="input-group">
+    <div class="input-group chat-input-bar">
       <textarea 
         id="chat-message-input"
         class="form-control"
@@ -530,6 +530,7 @@
         aria-label="{% trans 'Mensagem' %}"
         rows="1"
         inputmode="text"
+        enterkeyhint="send"
         autocomplete="on"
         autocapitalize="sentences"
         spellcheck="true"
