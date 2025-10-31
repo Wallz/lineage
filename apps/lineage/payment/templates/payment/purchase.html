@@ -65,6 +65,10 @@
             <p class="reports-card-description">{% trans "Configure sua compra de moedas" %}</p>
           </div>
           <div class="reports-card-body">
+            <div class="alert alert-info" role="alert" style="margin-bottom:16px">
+              <i class="fas fa-info-circle me-2"></i>
+              {% trans "Pagamentos via PIX podem levar alguns minutos para confirmação. Caso a página do Mercado Pago não retorne automaticamente, volte para o site e acompanhe em 'Pagamentos Pendentes'. Assim que o PIX for aprovado, seu saldo será creditado automaticamente." %}
+            </div>
             <form method="post" action="{% url 'payment:novo_pedido' %}" class="purchase-form">
               {% csrf_token %}
 

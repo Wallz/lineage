@@ -88,6 +88,16 @@
                 <p class="action-description">{% trans "Adicione moedas à sua carteira" %}</p>
               </div>
             </a>
+
+            <a href="{% url 'payment:pedidos_pendentes' %}" class="action-card">
+              <div class="action-icon">
+                <i class="fas fa-list"></i>
+              </div>
+              <div class="action-content">
+                <h4 class="action-title">{% trans "Pagamentos Pendentes" %}</h4>
+                <p class="action-description">{% trans "Acompanhe pedidos em processamento" %}</p>
+              </div>
+            </a>
             
             <a href="{% url 'wallet:transfer_to_server' %}" class="action-card">
               <div class="action-icon">
