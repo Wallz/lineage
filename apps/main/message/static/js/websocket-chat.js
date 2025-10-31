@@ -24,15 +24,18 @@ class WebSocketChat {
     }
 
     initializeWebSocket() {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/messages/`;
-        
+        const wsUrl = window.location.origin.replace(/^http/, 'ws') + '/ws/messages/';
         this.socket = new WebSocket(wsUrl);
         
         this.socket.onopen = () => {
             console.log('WebSocket connected');
             this.reconnectAttempts = 0;
             this.updateConnectionStatus(true);
+            // Envios iniciais somente após conexão aberta
+            this.sendWebSocketMessage({ type: 'user_activity' });
+            this.sendWebSocketMessage({ type: 'get_unread_count' });
+            this.sendWebSocketMessage({ type: 'get_friends_stats' });
+            this.sendWebSocketMessage({ type: 'get_friends_status' });
         };
         
         this.socket.onmessage = (event) => {
@@ -431,47 +434,27 @@ class WebSocketChat {
                 type: 'user_activity'
             });
         }, 300000);
-        
-        // Enviar atividade inicial
-        this.sendWebSocketMessage({
-            type: 'user_activity'
-        });
-        
+
         // Atualizar contadores de não lidas a cada 10 segundos
         setInterval(() => {
             this.sendWebSocketMessage({
                 type: 'get_unread_count'
             });
         }, 10000);
-        
-        // Enviar contadores iniciais
-        this.sendWebSocketMessage({
-            type: 'get_unread_count'
-        });
-        
+
         // Obter estatísticas de amigos a cada 30 segundos
         setInterval(() => {
             this.sendWebSocketMessage({
                 type: 'get_friends_stats'
             });
         }, 30000);
-        
-        // Obter estatísticas iniciais
-        this.sendWebSocketMessage({
-            type: 'get_friends_stats'
-        });
-        
+
         // Obter status dos amigos a cada 15 segundos
         setInterval(() => {
             this.sendWebSocketMessage({
                 type: 'get_friends_status'
             });
         }, 15000);
-        
-        // Obter status inicial dos amigos
-        this.sendWebSocketMessage({
-            type: 'get_friends_status'
-        });
     }
 
     showError(message) {

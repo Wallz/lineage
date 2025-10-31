@@ -1,7 +1,7 @@
-const isLocalhost = window.location.hostname === '127.0.0.1';
-const protocol = isLocalhost ? 'ws://' : 'wss://';
+const isLocalhost = ['127.0.0.1', 'localhost'].includes(window.location.hostname);
+const wsUrlBase = window.location.origin.replace(/^http/, 'ws');
 const chatSocket = new WebSocket(
-    protocol + window.location.host + '/ws/chat/' + groupName + '/'
+    wsUrlBase + '/ws/chat/' + groupName + '/'
 );    
 
 chatSocket.onerror = function(e) {
@@ -39,10 +39,15 @@ document.querySelector('#chat-message-submit').onclick = function(e) {
     const messageInputDom = document.querySelector('#chat-message-input');
     const message = messageInputDom.value;
     if (message.trim()) {
-        chatSocket.send(JSON.stringify({
-            'message': message,
-            'sender': currentUser
-        }));
+        if (chatSocket.readyState === WebSocket.OPEN) {
+            chatSocket.send(JSON.stringify({
+                'message': message,
+                'sender': currentUser
+            }));
+        } else {
+            console.warn('WebSocket not open yet. Current state:', chatSocket.readyState);
+            return; // evita InvalidStateError
+        }
         appendMessage(message, currentUser, currentUserAvatar, true, null);
         messageInputDom.value = '';
     }
