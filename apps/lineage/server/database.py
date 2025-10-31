@@ -30,6 +30,11 @@ class LineageDB:
         self.cache: Dict[Tuple[str, Tuple[Any, ...]], Tuple[List[Dict], float]] = {}
         self.cache_ttl = 60  # segundos
         self.enabled = os.getenv("LINEAGE_DB_ENABLED", "false").lower() == "true"
+        # Estado do healthcheck
+        self._last_check_time: float = 0.0
+        self._last_check_ok: bool = False
+        self._check_cooldown_seconds: int = int(os.getenv("LINEAGE_DB_CHECK_COOLDOWN", "20"))
+        self._ping_timeout_seconds: int = int(os.getenv("LINEAGE_DB_PING_TIMEOUT", "2"))
         
         if self.enabled:
             self._connect()
@@ -50,7 +55,25 @@ class LineageDB:
             safe_password = quote_plus(password)
 
             url = f"mysql+pymysql://{user}:{safe_password}@{host}:{port}/{dbname}"
-            self.engine = create_engine(url, echo=False, pool_pre_ping=True)
+
+            # Timeouts para evitar travar o worker caso o DB esteja inacessível
+            connect_timeout = int(os.getenv("LINEAGE_DB_CONNECT_TIMEOUT", "3"))
+            read_timeout = int(os.getenv("LINEAGE_DB_READ_TIMEOUT", "3"))
+            write_timeout = int(os.getenv("LINEAGE_DB_WRITE_TIMEOUT", "3"))
+            pool_timeout = int(os.getenv("LINEAGE_DB_POOL_TIMEOUT", "3"))
+
+            self.engine = create_engine(
+                url,
+                echo=False,
+                pool_pre_ping=True,
+                pool_recycle=180,
+                pool_timeout=pool_timeout,
+                connect_args={
+                    "connect_timeout": connect_timeout,
+                    "read_timeout": read_timeout,
+                    "write_timeout": write_timeout,
+                },
+            )
 
             print("✅ Conectado ao banco Lineage com SQLAlchemy")
 
@@ -121,13 +144,42 @@ class LineageDB:
             return False
         if not self.engine:
             return False
-        try:
-            with self.engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            return True
-        except SQLAlchemyError as e:
-            print(f"❌ Conexão perdida: {e}")
+        # Respeita cooldown quando último resultado foi negativo
+        now = time.time()
+        if not self._last_check_ok and (now - self._last_check_time) < self._check_cooldown_seconds:
             return False
+
+        result_container = {"ok": False}
+        done = threading.Event()
+
+        def ping_db():
+            try:
+                with self.engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                result_container["ok"] = True
+            except Exception as e:
+                print(f"❌ Conexão perdida: {e}")
+            finally:
+                done.set()
+
+        t = threading.Thread(target=ping_db, daemon=True)
+        t.start()
+        finished = done.wait(timeout=self._ping_timeout_seconds)
+
+        if not finished:
+            # Falha por timeout; descarta conexões do pool para evitar estados zumbis
+            try:
+                if self.engine:
+                    self.engine.dispose()
+            except Exception:
+                pass
+            self._last_check_ok = False
+            self._last_check_time = now
+            return False
+
+        self._last_check_ok = result_container["ok"]
+        self._last_check_time = now
+        return self._last_check_ok
 
     def select(self, query: str, params: Dict[str, Any] = {}, use_cache: bool = False) -> Optional[List[Dict]]:
         if not self.enabled:

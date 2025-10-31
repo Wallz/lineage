@@ -543,22 +543,37 @@ class GrandBossStatusView(GenericAPIView):
                 is_alive = True
                 
                 if respawn_time:
-                    # Converte para timestamp se necessário
-                    if isinstance(respawn_time, str):
+                    # Converte vários formatos para string ISO ou deixa vazio
+                    from datetime import datetime, timezone as dt_timezone
+                    if isinstance(respawn_time, (int, float)):
+                        # Converte timestamp -> ISO UTC
                         try:
-                            from datetime import datetime
-                            respawn_time = datetime.fromisoformat(respawn_time.replace('Z', '+00:00')).timestamp()
-                        except:
-                            respawn_time = None
-                    
-                    if respawn_time and respawn_time > current_time:
+                            respawn_time_str = datetime.fromtimestamp(respawn_time, tz=dt_timezone.utc).isoformat()
+                        except Exception:
+                            respawn_time_str = None
+                    elif isinstance(respawn_time, str):
+                        # Normaliza strings ISO com Z
+                        try:
+                            parsed = datetime.fromisoformat(respawn_time.replace('Z', '+00:00'))
+                            if parsed.tzinfo is None:
+                                parsed = parsed.replace(tzinfo=dt_timezone.utc)
+                            respawn_time_str = parsed.isoformat()
+                        except Exception:
+                            respawn_time_str = respawn_time  # mantém como veio
+                    else:
+                        respawn_time_str = None
+
+                    # Para o status vivo/morto, use timestamp se conseguirmos
+                    if isinstance(respawn_time, (int, float)) and respawn_time > current_time:
                         is_alive = False
+                else:
+                    respawn_time_str = None
                 
                 processed_boss = {
                     'boss_name': f"Boss {boss_id}",  # Pode ser melhorado com um mapeamento
                     'boss_id': boss_id,
                     'is_alive': is_alive,
-                    'respawn_time': respawn_time,
+                    'respawn_time': respawn_time_str,
                     'location': 'Unknown'  # Pode ser melhorado
                 }
                 processed_data.append(processed_boss)

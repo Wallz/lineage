@@ -56,7 +56,8 @@ class GrandBossStatusSerializer(serializers.Serializer):
     boss_name = serializers.CharField()
     boss_id = serializers.IntegerField()
     is_alive = serializers.BooleanField()
-    respawn_time = serializers.DateTimeField(required=False, allow_null=True)
+    # Pode ser ISO8601, human-readable ou vazio dependendo da fonte
+    respawn_time = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     location = serializers.CharField(required=False, allow_blank=True)
 
 
