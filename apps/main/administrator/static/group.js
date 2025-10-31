@@ -154,4 +154,14 @@ document.addEventListener('DOMContentLoaded', () => {
         chatInput.addEventListener('input', autoResize);
         autoResize();
     }
+
+    // Garantir que o input fique visível ao abrir o teclado no mobile
+    if (chatInput) {
+        chatInput.addEventListener('focus', () => {
+            setTimeout(() => {
+                chatLog.scrollTop = chatLog.scrollHeight;
+                chatInput.scrollIntoView({ block: 'end', behavior: 'smooth' });
+            }, 100);
+        });
+    }
 });

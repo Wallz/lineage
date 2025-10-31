@@ -523,9 +523,17 @@
 
     <!-- Input for Chat Message -->
     <div class="input-group chat-input-bar">
+      <button 
+        id="emoji-button" 
+        type="button" 
+        class="btn btn-light chat-emoji-btn" 
+        aria-label="{% trans 'Selecionar Emoji' %}"
+      >
+        &#x1F60A;
+      </button>
       <textarea 
         id="chat-message-input"
-        class="form-control"
+        class="form-control chat-textarea"
         placeholder="{% trans 'Digite sua mensagem aqui...' %}"
         aria-label="{% trans 'Mensagem' %}"
         rows="1"
@@ -536,19 +544,13 @@
         spellcheck="true"
       ></textarea>
       <button 
-        id="emoji-button" 
-        type="button" 
-        class="btn" 
-        aria-label="{% trans 'Selecionar Emoji' %}"
-      >
-        &#x1F60A;
-      </button>
-      <input 
         id="chat-message-submit" 
         type="button" 
-        class="btn" 
-        value="{% trans 'Enviar' %}"
+        class="btn btn-primary chat-send-btn"
+        aria-label="{% trans 'Enviar' %}"
       >
+        {% trans 'Enviar' %}
+      </button>
     </div>
   </div>
 </div>
