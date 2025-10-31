@@ -40,16 +40,30 @@ echo "Making migrations (host)..."
 python3 manage.py makemigrations || { echo "Failed to make migrations"; exit 1; }
 
 # Stop running containers
-echo "Stopping containers..."
+echo "Stopping containers (compose down)..."
 $DOCKER_COMPOSE down || { echo "Failed to stop running containers"; }
 
-# Remove old containers
-echo "Removing old containers..."
-containers=$(docker ps -a -q --filter name=site --filter name=celery --filter name=celery_beat --filter name=flower --filter name=nginx --filter name=redis)
+# Remove legacy/old containers explicitly (compose service names may have changed)
+echo "Removing legacy containers..."
+legacy_filters=(
+  "name=site"           # old app container name (requested)
+  "name=site_wsgi"      # new wsgi app container (cleanup previous runs)
+  "name=site_http"      # new http app container (cleanup previous runs)
+  "name=web"            # common app alias
+  "name=django"         # common app alias
+  "name=backend"        # common app alias
+  "name=celery"
+  "name=celery_beat"
+  "name=flower"
+  "name=nginx"
+  "name=redis"
+)
+
+containers=$(docker ps -a -q ${legacy_filters[@]})
 if [ -n "$containers" ]; then
-  docker rm $containers || echo "Some containers could not be removed (maybe already removed)"
+  docker rm -f $containers || echo "Some legacy containers could not be removed (maybe already removed)"
 else
-  echo "No containers found to remove."
+  echo "No legacy containers found to remove."
 fi
 
 # Remove optional static_data volume
@@ -57,23 +71,62 @@ echo "Removing static_data volume..."
 docker volume rm $(docker volume ls -q --filter name=static_data) || echo "Volume not found or already removed"
 
 # Build Docker images
-echo "Building Docker images..."
-$DOCKER_COMPOSE build || { echo "Failed to build Docker images"; exit 1; }
+echo "Building Docker images (pulling latest bases)..."
+$DOCKER_COMPOSE build --pull || { echo "Failed to build Docker images"; exit 1; }
 
 # Start containers
 echo "Starting containers..."
 $DOCKER_COMPOSE up -d || { echo "Failed to start containers"; exit 1; }
 
-# Wait for DB (direct)
+# Wait for DB (detect common service names)
 echo "Waiting for database..."
-until $DOCKER_COMPOSE exec postgres pg_isready -U db_user > /dev/null 2>&1; do
-  echo "$(date '+%H:%M:%S') - PostgreSQL is not ready yet. Waiting..."
-  sleep 2
+DB_SERVICE=""
+DB_CANDIDATES=("${DB_SERVICE_OVERRIDE}" postgres db postgresql)
+
+for svc in "${DB_CANDIDATES[@]}"; do
+  if [ -n "$svc" ]; then
+    if $DOCKER_COMPOSE ps --services | grep -q "^${svc}$"; then
+      echo "Trying DB service: $svc"
+      # Try up to 30s
+      for i in {1..15}; do
+        if $DOCKER_COMPOSE exec -T "$svc" pg_isready -U "${POSTGRES_USER:-db_user}" > /dev/null 2>&1; then
+          DB_SERVICE="$svc"
+          break 2
+        fi
+        echo "$(date '+%H:%M:%S') - $svc not ready yet. Waiting..."
+        sleep 2
+      done
+    fi
+  fi
 done
 
-# Run migration inside container (applies what was created on host)
+if [ -z "$DB_SERVICE" ]; then
+  echo "WARNING: Could not detect a PostgreSQL service or it is not responding. Skipping DB wait."
+else
+  echo "Database service '$DB_SERVICE' is ready."
+fi
+
+# Run migration inside container (auto-detect app service)
 echo "Applying migrations inside container..."
-$DOCKER_COMPOSE exec site python3 manage.py migrate || { echo "Failed to apply migrations"; exit 1; }
+APP_SERVICE=""
+APP_CANDIDATES=("${APP_SERVICE_OVERRIDE}" site_wsgi site_http app web site django backend)
+for svc in "${APP_CANDIDATES[@]}"; do
+  if [ -n "$svc" ]; then
+    if $DOCKER_COMPOSE ps --services | grep -q "^${svc}$"; then
+      if $DOCKER_COMPOSE exec -T "$svc" python3 manage.py --version > /dev/null 2>&1; then
+        APP_SERVICE="$svc"
+        break
+      fi
+    fi
+  fi
+done
+
+if [ -z "$APP_SERVICE" ]; then
+  echo "ERROR: Could not detect the Django app service to run migrations. Set APP_SERVICE_OVERRIDE or check compose services."
+  exit 1
+fi
+
+$DOCKER_COMPOSE exec "$APP_SERVICE" python3 manage.py migrate || { echo "Failed to apply migrations"; exit 1; }
 
 # Clean up
 echo "Cleaning up..."
