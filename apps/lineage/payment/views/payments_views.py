@@ -166,6 +166,14 @@ def confirmar_pagamento(request, pedido_id):
                 success_url = request.build_absolute_uri(reverse('payment:pagamento_sucesso'))
                 failure_url = request.build_absolute_uri(reverse('payment:pagamento_erro'))
 
+                # Mercado Pago pode exigir HTTPS para auto_return funcionar corretamente
+                if success_url.startswith("http://"):
+                    success_url = "https://" + success_url[len("http://"):]
+                if failure_url.startswith("http://"):
+                    failure_url = "https://" + failure_url[len("http://"):]
+                if pending_url.startswith("http://"):
+                    pending_url = "https://" + pending_url[len("http://"):]
+
                 preference_data = {
                     "items": [{
                         "title": "Moedas para o jogo",
