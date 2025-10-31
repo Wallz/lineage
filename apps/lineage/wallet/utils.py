@@ -23,7 +23,7 @@ def calcular_bonus_compra(valor_compra):
     return valor_bonus, bonus.descricao, bonus.bonus_percentual
 
 
-def aplicar_compra_com_bonus(wallet, valor_compra, metodo_pagamento):
+def aplicar_compra_com_bonus(wallet, valor_compra, metodo_pagamento, descricao_extra: str | None = None):
     """
     Aplica uma compra com bônus usando as funções centralizadas
     - Valor da compra vai para saldo normal
@@ -39,11 +39,15 @@ def aplicar_compra_com_bonus(wallet, valor_compra, metodo_pagamento):
     valor_bonus, descricao_bonus, percentual_bonus = calcular_bonus_compra(valor_compra)
     
     # Aplica a transação principal na carteira normal
+    descricao_base = f"Compra de moedas via {metodo_pagamento}"
+    if descricao_extra:
+        descricao_base = f"{descricao_base} {descricao_extra}"
+
     aplicar_transacao(
         wallet=wallet,
         tipo="ENTRADA",
         valor=valor_compra,
-        descricao=f"Compra de moedas via {metodo_pagamento}",
+        descricao=descricao_base,
         origem=metodo_pagamento,
         destino=wallet.usuario.username
     )

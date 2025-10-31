@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import PedidoPagamento, Pagamento, WebhookLog
 from core.admin import BaseModelAdmin
+from django.template.response import TemplateResponse
 
 
 @admin.register(PedidoPagamento)
@@ -29,11 +30,23 @@ class PedidoPagamentoAdmin(BaseModelAdmin):
 
     @admin.action(description='Confirmar pagamentos selecionados')
     def confirmar_pagamentos(self, request, queryset):
+        # Tela de confirmação customizada
+        if 'apply' not in request.POST:
+            context = {
+                'queryset': queryset,
+                'opts': self.model._meta,
+                'app_label': self.model._meta.app_label,
+                'action': 'confirmar_pagamentos',
+                'title': 'Confirmar pagamentos selecionados',
+                'total': queryset.count(),
+            }
+            return TemplateResponse(request, 'admin/payment/confirmar_pagamentos.html', context)
+
         total = 0
         for pedido in queryset:
             if pedido.status != 'CONFIRMADO':
-                # Confirma o pedido e aplica os créditos/bônus
-                pedido.confirmar_pagamento()
+                # Confirma o pedido e aplica os créditos/bônus (marca no histórico o admin)
+                pedido.confirmar_pagamento(actor=request.user)
                 # Também marca o Pagamento associado como 'paid' para evitar reprocessamento via webhook
                 from .models import Pagamento
                 pagamento = Pagamento.objects.filter(pedido_pagamento=pedido).first()
