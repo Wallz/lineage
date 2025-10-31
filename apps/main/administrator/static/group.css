@@ -173,10 +173,21 @@
 }
 
 @media (max-width: 576px) {
+    #chat-log {
+        height: calc(100vh - 240px); /* mais alto em telas pequenas */
+    }
     .message-content {
         max-width: 75%;
     }
     .chat-message {
         gap: 8px;
     }
+}
+
+.chat-input-bar {
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+    border-top: 1px solid #e5e5e5;
+    padding-top: 6px;
 }
