@@ -190,11 +190,61 @@ class PagamentoAdmin(BaseModelAdmin):
 
 @admin.register(WebhookLog)
 class WebhookLogAdmin(BaseModelAdmin):
-    list_display = ('id', 'tipo', 'data_id', 'recebido_em')
-    search_fields = ('tipo', 'data_id')
+    list_display = ('id', 'provedor', 'tipo', 'data_id', 'pagamento_relacionado', 'status_evento', 'recebido_em')
+    search_fields = ('tipo', 'data_id', 'payload__data__object__metadata__pagamento_id', 'payload__metadata__pagamento_id')
     list_filter = ('tipo', 'recebido_em')
     readonly_fields = ('tipo', 'data_id', 'payload', 'recebido_em')
     ordering = ('-recebido_em',)
+
+    def provedor(self, obj):
+        # Heurística simples: Stripe usa tipos com ponto (ex.: checkout.session.completed)
+        # MP usa tipos planos (payment, merchant_order, ...)
+        try:
+            return 'Stripe' if (obj.tipo and '.' in obj.tipo) else 'MercadoPago'
+        except Exception:
+            return '-'
+    provedor.short_description = 'Provedor'
+
+    def pagamento_relacionado(self, obj):
+        # Tenta extrair pagamento_id de diferentes formatos de payload
+        p = obj.payload or {}
+        try:
+            # Stripe (checkout.session.*)
+            meta = (((p.get('data') or {}).get('object') or {}).get('metadata') or {})
+            pid = meta.get('pagamento_id')
+            if pid:
+                return pid
+            # Stripe (payment_intent.*)
+            meta = ((p.get('data') or {}).get('object') or {}).get('metadata') or {}
+            pid = meta.get('pagamento_id')
+            if pid:
+                return pid
+            # Mercado Pago (fallback de sucesso com payload completo)
+            pid = (p.get('metadata') or {}).get('pagamento_id')
+            if pid:
+                return pid
+        except Exception:
+            pass
+        return '-'
+    pagamento_relacionado.short_description = 'Pagamento ID'
+
+    def status_evento(self, obj):
+        p = obj.payload or {}
+        try:
+            # Stripe session
+            data_object = (p.get('data') or {}).get('object') or {}
+            if 'payment_status' in data_object:
+                return data_object.get('payment_status') or data_object.get('status') or '-'
+            # Stripe PI
+            if data_object.get('object') == 'payment_intent':
+                return data_object.get('status') or '-'
+            # Mercado Pago (fallbacks armazenam status direto)
+            if 'status' in p:
+                return p.get('status')
+        except Exception:
+            pass
+        return '-'
+    status_evento.short_description = 'Status'
 
     def has_add_permission(self, request):
         return False  # impede a criação manual

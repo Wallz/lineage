@@ -769,6 +769,11 @@ METHODS_PAYMENTS = ["MercadoPago", "Stripe"]
 MERCADO_PAGO_ACTIVATE_PAYMENTS = str2bool(get_env_variable('CONFIG_MERCADO_PAGO_ACTIVATE_PAYMENTS'))
 STRIPE_ACTIVATE_PAYMENTS = str2bool(get_env_variable('CONFIG_STRIPE_ACTIVATE_PAYMENTS'))
 
+# =========================== GOOGLE ANALYTICS ===========================
+# Ativa/Desativa GA e define o Measurement ID (ex.: G-XXXXXXXXXX)
+GOOGLE_ANALYTICS_ACTIVE = str2bool(os.environ.get('CONFIG_GOOGLE_ANALYTICS_ACTIVE', 'False'))
+GOOGLE_ANALYTICS_MEASUREMENT_ID = os.environ.get('CONFIG_GOOGLE_ANALYTICS_MEASUREMENT_ID', '')
+
 # =========================== HCAPTCHA CONFIGS ===========================
 
 HCAPTCHA_SITE_KEY = os.environ.get('CONFIG_HCAPTCHA_SITE_KEY')

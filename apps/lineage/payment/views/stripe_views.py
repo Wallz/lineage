@@ -8,6 +8,7 @@ from utils.notifications import send_notification
 from ..models import Pagamento, WebhookLog
 import logging
 from django.shortcuts import render, redirect
+from django.utils import timezone
 
 
 logger = logging.getLogger(__name__)
@@ -35,11 +36,12 @@ def stripe_webhook(request):
 
     logger.info(f"Evento Stripe recebido: {event['type']}")
 
-    WebhookLog.objects.create(
-        tipo=event["type"],
-        data_id=event["id"],
-        payload=event
-    )
+    if not WebhookLog.objects.filter(tipo=event["type"], data_id=str(event["id"])):
+        WebhookLog.objects.create(
+            tipo=event["type"],
+            data_id=event["id"],
+            payload=event
+        )
 
     # Tratamento de evento
     if event['type'] == 'checkout.session.completed':
@@ -61,6 +63,7 @@ def stripe_webhook(request):
                     )
                     
                     pagamento.status = "paid"
+                    pagamento.processado_em = timezone.now()
                     pagamento.save()
 
                     pedido = pagamento.pedido_pagamento
@@ -78,6 +81,33 @@ def stripe_webhook(request):
             except Pagamento.DoesNotExist:
                 logger.error(f"Pagamento ID {pagamento_id} não encontrado.")
                 return HttpResponse(status=404)
+
+    elif event['type'] == 'payment_intent.succeeded':
+        # Fallback: caso o Checkout não dispare/chegue a tempo
+        intent = event['data']['object']
+        meta = intent.get('metadata', {}) or {}
+        pagamento_id = meta.get('pagamento_id')
+        if pagamento_id:
+            try:
+                pagamento = Pagamento.objects.get(id=pagamento_id)
+                if pagamento.status == "pending":
+                    from apps.lineage.wallet.utils import aplicar_compra_com_bonus
+                    from decimal import Decimal
+                    wallet, created = Wallet.objects.get_or_create(usuario=pagamento.usuario)
+                    valor_total, valor_bonus, _ = aplicar_compra_com_bonus(
+                        wallet, Decimal(str(pagamento.valor)), "Stripe"
+                    )
+                    pagamento.status = "paid"
+                    pagamento.processado_em = timezone.now()
+                    pagamento.save()
+                    pedido = pagamento.pedido_pagamento
+                    if pedido:
+                        pedido.bonus_aplicado = valor_bonus
+                        pedido.total_creditado = valor_total
+                        pedido.status = "CONCLUÍDO"
+                        pedido.save()
+            except Pagamento.DoesNotExist:
+                logger.error(f"Pagamento ID {pagamento_id} (PI) não encontrado.")
 
     return HttpResponse(status=200)
 

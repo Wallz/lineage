@@ -224,9 +224,28 @@ def confirmar_pagamento(request, pedido_id):
 
             elif pedido.metodo == "Stripe":
                 product_name = f"Crédito para carteira virtual - {getattr(settings, 'PROJECT_NAME', 'PDL')}"
+
+                # Constrói URLs com base no host atual (evita inconsistência de domínio)
+                success_url = request.build_absolute_uri(
+                    reverse('payment:stripe_pagamento_sucesso')
+                ) + '?session_id={CHECKOUT_SESSION_ID}'
+                cancel_url = request.build_absolute_uri(
+                    reverse('payment:stripe_pagamento_erro')
+                )
+                if success_url.startswith("http://"):
+                    success_url = "https://" + success_url[len("http://"):]
+                if cancel_url.startswith("http://"):
+                    cancel_url = "https://" + cancel_url[len("http://"):]
+
+                # Idempotência: amarra criação da sessão ao pagamento
+                idempotency_key = f"checkout_session_{pagamento.id}"
+
                 session = stripe.checkout.Session.create(
                     payment_method_types=['card'],
                     mode='payment',
+                    allow_promotion_codes=True,
+                    client_reference_id=str(pagamento.id),
+                    customer_email=getattr(request.user, 'email', None) or None,
                     line_items=[{
                         'price_data': {
                             'currency': 'brl',
@@ -235,10 +254,17 @@ def confirmar_pagamento(request, pedido_id):
                         },
                         'quantity': 1,
                     }],
-                    success_url=settings.STRIPE_SUCCESS_URL + '?session_id={CHECKOUT_SESSION_ID}',
-                    cancel_url=settings.STRIPE_FAILURE_URL,
-                    metadata={"pagamento_id": pagamento.id}
-                )
+                    success_url=success_url,
+                    cancel_url=cancel_url,
+                    metadata={"pagamento_id": pagamento.id},
+                    payment_intent_data={
+                        'metadata': {
+                            'pagamento_id': str(pagamento.id),
+                            'pedido_id': str(pedido.id),
+                            'usuario_id': str(request.user.id),
+                        }
+                    }
+                , idempotency_key=idempotency_key)
 
                 pagamento.transaction_code = session.id
                 pagamento.save()

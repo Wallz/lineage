@@ -36,8 +36,8 @@ def get_jazzmin_settings(project_title, project_logo):
         "welcome_sign": "Welcome to Panel Admin",
         # Copyright on the footer
         "copyright": "all rights reserved to " + project_title,
-        # The model admin to search from the search bar, search bar omitted if excluded
-        # "search_model": "auth.User",
+        # The model admin to search from the search bar (usa seu modelo customizado)
+        "search_model": "home.User",
         # Field name on user model that contains avatar ImageField/URLField/Charfield or a callable that receives the user
         "user_avatar": True,
         # URL for the login page
