@@ -174,9 +174,10 @@ def confirmar_pagamento(request, pedido_id):
                 if pending_url.startswith("http://"):
                     pending_url = "https://" + pending_url[len("http://"):]
 
+                item_title = f"Crédito para carteira virtual - {getattr(settings, 'PROJECT_NAME', 'PDL')}"
                 preference_data = {
                     "items": [{
-                        "title": "Moedas para o jogo",
+                        "title": item_title,
                         "quantity": 1,
                         "currency_id": "BRL",
                         "unit_price": float(pedido.valor_pago),
@@ -222,13 +223,14 @@ def confirmar_pagamento(request, pedido_id):
                 return redirect(preference["init_point"])
 
             elif pedido.metodo == "Stripe":
+                product_name = f"Crédito para carteira virtual - {getattr(settings, 'PROJECT_NAME', 'PDL')}"
                 session = stripe.checkout.Session.create(
                     payment_method_types=['card'],
                     mode='payment',
                     line_items=[{
                         'price_data': {
                             'currency': 'brl',
-                            'product_data': {'name': 'Moedas para o jogo'},
+                            'product_data': {'name': product_name},
                             'unit_amount': int(pedido.valor_pago * 100),
                         },
                         'quantity': 1,
