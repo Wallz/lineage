@@ -2963,3 +2963,64 @@ body {
   background: #0ff0cc !important;
   box-shadow: 0 0 14px rgba(0, 255, 204, 0.18), 0 4px 12px rgba(0, 0, 0, 0.4) !important;
 }
+
+/* ============================================================================
+AJUSTES DE TEMA ESCURO PARA THREADS DE COMENTÁRIOS NO DETALHE DO POST
+============================================================================ */
+
+/* Balão do comentário principal (antes bg-light) */
+.comment-item .bg-light {
+  background: linear-gradient(145deg, #0b0f1a, #0e1422) !important;
+  border-left: 4px solid rgba(0, 255, 204, 0.35) !important;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 255, 204, 0.06) inset !important;
+}
+
+/* Triângulo do avatar do comentário principal */
+.comment-item .avatar-container::after {
+  border-top-color: #0f1626 !important;
+}
+
+/* Balão da resposta de nível 1 (antes bg-white) */
+.comment-item .ms-4 .bg-white {
+  background: linear-gradient(145deg, #0b0f1a, #0e1422) !important;
+  border-left: 3px solid rgba(40, 167, 69, 0.55) !important; /* mantém acento verde */
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(40, 167, 69, 0.06) inset !important;
+}
+
+/* Triângulo do avatar das respostas de nível 1 */
+.comment-item .ms-4 .avatar-container::after {
+  border-top-color: #0f1626 !important;
+}
+
+/* Balões de respostas de nível 2 (antes bg-light) */
+.replies-to-replies .bg-light {
+  background: linear-gradient(145deg, #0b0f1a, #0e1422) !important;
+  border-left: 2px solid rgba(255, 193, 7, 0.55) !important; /* mantém acento âmbar */
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 193, 7, 0.06) inset !important;
+}
+
+/* Triângulo do avatar das respostas de nível 2 */
+.replies-to-replies .avatar-container::after {
+  border-top-color: #0f1626 !important;
+}
+
+/* Containers dos formulários de resposta (antes claro) */
+.reply-form-container,
+.reply-to-reply-form-container {
+  background: linear-gradient(145deg, #0b0f1a, #0e1422) !important;
+  border-left-color: rgba(108, 117, 125, 0.5) !important;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 255, 204, 0.06) inset !important;
+}
+
+/* Pré-visualização de menções dentro do escuro */
+.mentions-preview {
+  background: linear-gradient(145deg, #0b0f1a, #0e1422) !important;
+  color: #a9bed4 !important;
+  border-left-color: rgba(0, 255, 204, 0.35) !important;
+}
+
+/* Ajuste de pequenos textos para contraste nos balões */
+.comment-item .small,
+.replies-to-replies .small {
+  color: #a9bed4 !important;
+}
