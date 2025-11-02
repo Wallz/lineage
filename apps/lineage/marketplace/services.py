@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from decimal import Decimal
 from .models import CharacterTransfer, MarketplaceTransaction, ClaimRequest
+from .config import MARKETPLACE_MASTER_ACCOUNT, MAX_CHARACTERS_PER_ACCOUNT
 from apps.lineage.wallet.models import Wallet
 from apps.lineage.wallet.signals import aplicar_transacao
 from utils.dynamic_import import get_query_class
@@ -22,9 +23,11 @@ class MarketplaceService:
     """
     
     @staticmethod
+    @transaction.atomic
     def list_character_for_sale(user, char_id, account_name, price, currency='BRL', notes=''):
         """
         Lista um personagem para venda no marketplace.
+        NOVA REGRA: Move o personagem para a conta mestre do sistema.
         
         Args:
             user: Usuário vendedor (Django User)
@@ -62,7 +65,23 @@ class MarketplaceService:
         if existing_transfer:
             raise ValidationError(_("Este personagem já está listado para venda."))
         
-        # 5. Criar a transferência
+        # 5. NOVA REGRA: Transferir personagem para a conta mestre do marketplace
+        try:
+            success = LineageMarketplace.transfer_character_to_account(
+                char_id,
+                MARKETPLACE_MASTER_ACCOUNT
+            )
+            
+            if not success:
+                raise ValidationError(
+                    _("Erro ao mover o personagem para a conta do marketplace. Tente novamente.")
+                )
+        except Exception as e:
+            raise ValidationError(
+                _("Erro ao transferir personagem: {}").format(str(e))
+            )
+        
+        # 6. Criar a transferência
         transfer = CharacterTransfer.objects.create(
             char_id=char_id,
             char_name=char_details['char_name'],
@@ -83,6 +102,7 @@ class MarketplaceService:
     def purchase_character(buyer, transfer_id, payment_method='wallet'):
         """
         Processa a compra de um personagem com integração total ao sistema de wallet.
+        NOVA REGRA: Valida limite de 7 personagens e transfere da conta mestre para o comprador.
         
         Args:
             buyer: Usuário comprador (Django User)
@@ -102,11 +122,19 @@ class MarketplaceService:
         if transfer.seller == buyer:
             raise ValidationError(_("Você não pode comprar seu próprio personagem."))
         
-        # 3. Verificar se o personagem está OFFLINE antes de comprar
+        # 3. NOVA REGRA: Verificar limite de 7 personagens na conta do comprador
+        buyer_char_count = LineageMarketplace.count_characters_in_account(buyer.username)
+        if buyer_char_count >= MAX_CHARACTERS_PER_ACCOUNT:
+            raise ValidationError(
+                _("Sua conta já possui {} personagens (limite do cliente Lineage 2). "
+                  "Delete ou transfira um personagem antes de comprar.").format(MAX_CHARACTERS_PER_ACCOUNT)
+            )
+        
+        # 4. Verificar se o personagem está OFFLINE antes de comprar
         char_details = LineageMarketplace.get_character_details(transfer.char_id)
         if char_details and char_details.get('online', 0) == 1:
             raise ValidationError(
-                _("O personagem {} está online! Aguarde o vendedor deslogar antes de comprar.").format(
+                _("O personagem {} está online! Aguarde deslogar antes de comprar.").format(
                     transfer.char_name
                 )
             )
@@ -183,8 +211,15 @@ class MarketplaceService:
         transfer.new_account = buyer.username  # Registra a nova conta
         transfer.save()
         
-        # 11. TRANSFERIR PERSONAGEM AUTOMATICAMENTE no banco L2
+        # 11. NOVA REGRA: Transferir personagem da conta mestre para o comprador
         try:
+            # Verifica se o personagem está na conta mestre
+            if not LineageMarketplace.verify_character_ownership(transfer.char_id, MARKETPLACE_MASTER_ACCOUNT):
+                raise ValidationError(
+                    _("Erro: personagem não está na conta do marketplace. Entre em contato com o suporte.")
+                )
+            
+            # Transfere da conta mestre para o comprador
             success = LineageMarketplace.transfer_character_to_account(
                 transfer.char_id,
                 buyer.username
@@ -270,9 +305,11 @@ class MarketplaceService:
         return claim
     
     @staticmethod
+    @transaction.atomic
     def cancel_sale(transfer_id, user):
         """
         Cancela uma venda (apenas se ainda não foi vendida).
+        NOVA REGRA: Devolve o personagem da conta mestre para o vendedor original.
         
         Args:
             transfer_id: ID da transferência
@@ -281,7 +318,7 @@ class MarketplaceService:
         Returns:
             CharacterTransfer: Objeto atualizado
         """
-        transfer = CharacterTransfer.objects.get(id=transfer_id)
+        transfer = CharacterTransfer.objects.select_for_update().get(id=transfer_id)
         
         # Apenas o vendedor pode cancelar
         if transfer.seller != user:
@@ -290,6 +327,38 @@ class MarketplaceService:
         # Apenas pode cancelar se ainda não foi vendido
         if transfer.status not in ['pending', 'for_sale']:
             raise ValidationError(_("Não é possível cancelar esta venda."))
+        
+        # NOVA REGRA: Verificar limite de 7 personagens na conta do vendedor
+        seller_char_count = LineageMarketplace.count_characters_in_account(transfer.old_account)
+        if seller_char_count >= MAX_CHARACTERS_PER_ACCOUNT:
+            raise ValidationError(
+                _("Sua conta já possui {} personagens (limite do cliente Lineage 2). "
+                  "Delete ou transfira um personagem antes de cancelar a venda.").format(MAX_CHARACTERS_PER_ACCOUNT)
+            )
+        
+        # NOVA REGRA: Devolver personagem da conta mestre para o vendedor
+        try:
+            # Verifica se o personagem está na conta mestre
+            if not LineageMarketplace.verify_character_ownership(transfer.char_id, MARKETPLACE_MASTER_ACCOUNT):
+                raise ValidationError(
+                    _("Erro: personagem não está na conta do marketplace. Entre em contato com o suporte.")
+                )
+            
+            # Transfere da conta mestre de volta para o vendedor
+            success = LineageMarketplace.transfer_character_to_account(
+                transfer.char_id,
+                transfer.old_account
+            )
+            
+            if not success:
+                raise ValidationError(
+                    _("Erro ao devolver o personagem para sua conta. Entre em contato com o suporte.")
+                )
+                
+        except Exception as e:
+            raise ValidationError(
+                _("Erro ao cancelar venda: {}").format(str(e))
+            )
         
         transfer.status = 'cancelled'
         transfer.save()

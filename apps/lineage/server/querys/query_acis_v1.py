@@ -1051,6 +1051,67 @@ class LineageMarketplace:
     
     @staticmethod
     @cache_lineage_result(timeout=300, use_cache=False)
+    def count_characters_in_account(account_name):
+        """
+        Conta quantos personagens existem em uma conta.
+        Usado para validar o limite de 7 personagens do Lineage 2.
+        Schema: ACIS (usa obj_Id)
+        """
+        sql = """
+            SELECT COUNT(*) as total
+            FROM characters 
+            WHERE account_name = :account_name
+        """
+        result = LineageDB().select(sql, {"account_name": account_name})
+        return result[0]['total'] if result and len(result) > 0 else 0
+    
+    @staticmethod
+    def create_or_update_marketplace_account(account_name, password_hash):
+        """
+        Cria ou atualiza a conta mestre do marketplace no banco L2.
+        Schema: ACIS v1
+        
+        Returns:
+            bool: True se sucesso, False se falhou
+        """
+        db = LineageDB()
+        
+        # Verifica se a conta já existe
+        check_sql = "SELECT login FROM accounts WHERE login = :account_name"
+        existing = db.select(check_sql, {"account_name": account_name})
+        
+        try:
+            if existing and len(existing) > 0:
+                # Atualiza conta existente
+                update_sql = """
+                    UPDATE accounts 
+                    SET password = :password_hash,
+                        accessLevel = 0,
+                        lastactive = UNIX_TIMESTAMP()
+                    WHERE login = :account_name
+                """
+                result = db.update(update_sql, {
+                    "password_hash": password_hash,
+                    "account_name": account_name
+                })
+                return result is not None and result > 0
+            else:
+                # Cria nova conta
+                insert_sql = """
+                    INSERT INTO accounts (login, password, accessLevel, lastactive)
+                    VALUES (:account_name, :password_hash, 0, UNIX_TIMESTAMP())
+                """
+                result = db.insert(insert_sql, {
+                    "account_name": account_name,
+                    "password_hash": password_hash
+                })
+                return result is not None
+        except Exception as e:
+            print(f"❌ Erro ao criar/atualizar conta: {e}")
+            return False
+    
+    @staticmethod
+    @cache_lineage_result(timeout=300, use_cache=False)
     def transfer_character_to_account(char_id, new_account):
         """
         Transfere um character para nova conta no banco L2.
