@@ -9,7 +9,7 @@ class CharacterTransferAdmin(BaseModelAdmin):
     list_display = ['char_name', 'char_level', 'seller', 'buyer', 'price', 'currency', 'status', 'listed_at', 'sold_at']
     list_filter = ['status', 'currency', 'listed_at', 'sold_at']
     search_fields = ['char_name', 'char_id', 'old_account', 'new_account', 'seller__username', 'buyer__username']
-    readonly_fields = ['listed_at', 'sold_at', 'created_at', 'updated_at']
+    readonly_fields = ['currency', 'listed_at', 'sold_at', 'created_at', 'updated_at']
     
     fieldsets = (
         (_('Informações do Personagem'), {
@@ -38,7 +38,7 @@ class MarketplaceTransactionAdmin(BaseModelAdmin):
     list_display = ['id', 'transfer', 'transaction_type', 'amount', 'currency', 'user', 'status', 'created_at', 'completed_at']
     list_filter = ['transaction_type', 'status', 'currency', 'created_at']
     search_fields = ['transfer__char_name', 'user__username', 'external_reference', 'notes']
-    readonly_fields = ['created_at', 'updated_at', 'completed_at']
+    readonly_fields = ['currency', 'created_at', 'updated_at', 'completed_at']
     
     fieldsets = (
         (_('Transferência'), {
