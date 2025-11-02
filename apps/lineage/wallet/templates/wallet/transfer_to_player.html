@@ -1,6 +1,7 @@
 {% extends "layouts/base.html" %}
 {% load i18n %}
 {% load static %}
+{% load l10n %}
 
 {% block extrastyle %}
 <link rel="stylesheet" href="{% static 'css/wallet.css' %}">
@@ -579,7 +580,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     {% if wallet %}
-      if (valor > {{ wallet.saldo }}) {
+      const saldoDisponivel = parseFloat('{{ wallet.saldo|unlocalize }}');
+      if (valor > saldoDisponivel) {
         e.preventDefault();
         alert('{% trans "Saldo insuficiente para realizar esta transferência" %}');
         valorInput.focus();

@@ -6,7 +6,10 @@ from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
+from decimal import Decimal
 from .models import CharacterTransfer, MarketplaceTransaction, ClaimRequest
+from apps.lineage.wallet.models import Wallet
+from apps.lineage.wallet.signals import aplicar_transacao
 from utils.dynamic_import import get_query_class
 
 # Importa a classe de queries do Lineage dinamicamente
@@ -72,7 +75,7 @@ class MarketplaceService:
     @transaction.atomic
     def purchase_character(buyer, transfer_id, payment_method='wallet'):
         """
-        Processa a compra de um personagem.
+        Processa a compra de um personagem com integração total ao sistema de wallet.
         
         Args:
             buyer: Usuário comprador (Django User)
@@ -92,34 +95,98 @@ class MarketplaceService:
         if transfer.seller == buyer:
             raise ValidationError(_("Você não pode comprar seu próprio personagem."))
         
-        # 3. Processar pagamento (implementar lógica específica)
-        # TODO: Integrar com sistema de wallet/pagamento
+        # 3. Buscar wallet do comprador (obrigatório ter wallet)
+        try:
+            buyer_wallet = Wallet.objects.select_for_update().get(usuario=buyer)
+        except Wallet.DoesNotExist:
+            raise ValidationError(_("Você não possui uma carteira. Entre em contato com o suporte."))
         
-        # 4. Criar transação de compra
+        # 4. Verificar se o comprador tem saldo suficiente
+        valor_compra = Decimal(str(transfer.price))
+        if buyer_wallet.saldo < valor_compra:
+            raise ValidationError(
+                _("Saldo insuficiente. Você precisa de R$ {:.2f} mas tem apenas R$ {:.2f}").format(
+                    valor_compra, buyer_wallet.saldo
+                )
+            )
+        
+        # 5. Buscar ou criar wallet do vendedor
+        seller_wallet, created = Wallet.objects.select_for_update().get_or_create(
+            usuario=transfer.seller,
+            defaults={'saldo': Decimal('0.00'), 'saldo_bonus': Decimal('0.00')}
+        )
+        
+        # 6. Processar pagamento na wallet
+        try:
+            # Debitar do comprador
+            aplicar_transacao(
+                wallet=buyer_wallet,
+                tipo='SAIDA',
+                valor=valor_compra,
+                descricao=_("Compra de personagem: {}").format(transfer.char_name),
+                origem=_("Marketplace"),
+                destino=transfer.seller.username
+            )
+            
+            # Creditar ao vendedor
+            aplicar_transacao(
+                wallet=seller_wallet,
+                tipo='ENTRADA',
+                valor=valor_compra,
+                descricao=_("Venda de personagem: {}").format(transfer.char_name),
+                origem=buyer.username,
+                destino=_("Marketplace")
+            )
+            
+        except ValueError as e:
+            raise ValidationError(str(e))
+        
+        # 7. Criar transação de compra no marketplace
         MarketplaceTransaction.objects.create(
             transfer=transfer,
             transaction_type='purchase',
             amount=transfer.price,
             currency=transfer.currency,
             user=buyer,
-            status='pending'
+            status='completed',
+            completed_at=timezone.now()
         )
         
-        # 5. Criar transação de venda
+        # 8. Criar transação de venda no marketplace
         MarketplaceTransaction.objects.create(
             transfer=transfer,
             transaction_type='sale',
             amount=transfer.price,
             currency=transfer.currency,
             user=transfer.seller,
-            status='pending'
+            status='completed',
+            completed_at=timezone.now()
         )
         
-        # 6. Atualizar transferência
+        # 9. Atualizar transferência
         transfer.buyer = buyer
         transfer.status = 'sold'
         transfer.sold_at = timezone.now()
+        transfer.new_account = buyer.username  # Registra a nova conta
         transfer.save()
+        
+        # 10. TRANSFERIR PERSONAGEM AUTOMATICAMENTE no banco L2
+        try:
+            success = LineageMarketplace.transfer_character_to_account(
+                transfer.char_id,
+                buyer.username
+            )
+            
+            if not success:
+                raise ValidationError(
+                    _("Erro ao transferir o personagem no banco do jogo. A compra será revertida. Entre em contato com o suporte.")
+                )
+                
+        except Exception as e:
+            # Se falhar a transferência no L2, reverte TUDO (por causa do @transaction.atomic)
+            raise ValidationError(
+                _("Erro ao transferir personagem: {}. A compra foi revertida e seu saldo foi restaurado.").format(str(e))
+            )
         
         return transfer
     

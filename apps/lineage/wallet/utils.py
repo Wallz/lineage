@@ -72,23 +72,25 @@ def transferir_para_jogador(wallet_origem, wallet_destino, valor, descricao=""):
     """
     from .signals import aplicar_transacao
     
-    aplicar_transacao(
-        wallet=wallet_origem,
-        tipo="SAIDA",
-        valor=valor,
-        descricao=f"Transferência para {wallet_destino.usuario.username}",
-        origem=wallet_origem.usuario.username,
-        destino=wallet_destino.usuario.username
-    )
+    # Usa transação atômica para garantir que ambas operações ocorram ou nenhuma
+    with transaction.atomic():
+        aplicar_transacao(
+            wallet=wallet_origem,
+            tipo="SAIDA",
+            valor=valor,
+            descricao=f"Transferência para {wallet_destino.usuario.username}",
+            origem=wallet_origem.usuario.username,
+            destino=wallet_destino.usuario.username
+        )
 
-    aplicar_transacao(
-        wallet=wallet_destino,
-        tipo="ENTRADA",
-        valor=valor,
-        descricao=f"Transferência de {wallet_origem.usuario.username}",
-        origem=wallet_origem.usuario.username,
-        destino=wallet_destino.usuario.username
-    )
+        aplicar_transacao(
+            wallet=wallet_destino,
+            tipo="ENTRADA",
+            valor=valor,
+            descricao=f"Transferência de {wallet_origem.usuario.username}",
+            origem=wallet_origem.usuario.username,
+            destino=wallet_destino.usuario.username
+        )
 
 
 def transferir_bonus_para_jogador(wallet_origem, wallet_destino, valor, descricao=""):
@@ -97,20 +99,22 @@ def transferir_bonus_para_jogador(wallet_origem, wallet_destino, valor, descrica
     """
     from .signals import aplicar_transacao_bonus
     
-    aplicar_transacao_bonus(
-        wallet=wallet_origem,
-        tipo="SAIDA",
-        valor=valor,
-        descricao=f"Transferência de bônus para {wallet_destino.usuario.username}",
-        origem=wallet_origem.usuario.username,
-        destino=wallet_destino.usuario.username
-    )
+    # Usa transação atômica para garantir que ambas operações ocorram ou nenhuma
+    with transaction.atomic():
+        aplicar_transacao_bonus(
+            wallet=wallet_origem,
+            tipo="SAIDA",
+            valor=valor,
+            descricao=f"Transferência de bônus para {wallet_destino.usuario.username}",
+            origem=wallet_origem.usuario.username,
+            destino=wallet_destino.usuario.username
+        )
 
-    aplicar_transacao_bonus(
-        wallet=wallet_destino,
-        tipo="ENTRADA",
-        valor=valor,
-        descricao=f"Transferência de bônus de {wallet_origem.usuario.username}",
-        origem=wallet_origem.usuario.username,
-        destino=wallet_destino.usuario.username
-    )
+        aplicar_transacao_bonus(
+            wallet=wallet_destino,
+            tipo="ENTRADA",
+            valor=valor,
+            descricao=f"Transferência de bônus de {wallet_origem.usuario.username}",
+            origem=wallet_origem.usuario.username,
+            destino=wallet_destino.usuario.username
+        )
